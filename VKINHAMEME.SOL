@@ -1,0 +1,641 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract ERC20 {
+    mapping(address => uint256) internal _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    uint256 internal _totalSupply;
+    string private _name;
+    string private _symbol;
+
+    constructor(string memory name_, string memory symbol_) {
+        _name = name_;
+        _symbol = symbol_;
+    }
+
+    function name() public view virtual returns (string memory) { return _name; }
+    function symbol() public view virtual returns (string memory) { return _symbol; }
+    function decimals() public view virtual returns (uint8) { return 18; }
+    function totalSupply() public view virtual returns (uint256) { return _totalSupply; }
+    function balanceOf(address account) public view virtual returns (uint256) { return _balances[account]; }
+    function transfer(address to, uint256 amount) public virtual returns (bool) {
+        address owner = msg.sender;
+        _transfer(owner, to, amount);
+        return true;
+    }
+    function allowance(address owner, address spender) public view virtual returns (uint256) { return _allowances[owner][spender]; }
+    function approve(address spender, uint256 amount) public virtual returns (bool) {
+        address owner = msg.sender;
+        _approve(owner, spender, amount);
+        return true;
+    }
+    function transferFrom(address from, address to, uint256 amount) public virtual returns (bool) {
+        address spender = msg.sender;
+        _spendAllowance(from, spender, amount);
+        _transfer(from, to, amount);
+        return true;
+    }
+    function _transfer(address from, address to, uint256 amount) internal virtual {
+        require(from != address(0), "ERC20: Transfer from zero address not allowed");
+        require(to != address(0), "ERC20: Transfer to zero address not allowed");
+        uint256 fromBalance = _balances[from];
+        require(fromBalance >= amount, "ERC20: Transfer amount exceeds sender balance");
+        unchecked { _balances[from] = fromBalance - amount; }
+        _balances[to] += amount;
+        emit Transfer(from, to, amount);
+    }
+    function _mint(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: Mint to zero address not allowed");
+        _totalSupply += amount;
+        _balances[account] += amount;
+        emit Transfer(address(0), account, amount);
+    }
+    function _burn(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: Burn from zero address not allowed");
+        uint256 accountBalance = _balances[account];
+        require(accountBalance >= amount, "ERC20: Burn amount exceeds balance");
+        unchecked { _balances[account] = accountBalance - amount; }
+        _totalSupply -= amount;
+        emit Transfer(account, address(0), amount);
+    }
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
+        require(owner != address(0), "ERC20: Approve from zero address not allowed");
+        require(spender != address(0), "ERC20: Approve to zero address not allowed");
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+    function _spendAllowance(address owner, address spender, uint256 amount) internal virtual {
+        uint256 currentAllowance = allowance(owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(currentAllowance >= amount, "ERC20: Insufficient allowance for transfer");
+            unchecked { _approve(owner, spender, currentAllowance - amount); }
+        }
+    }
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+contract Ownable {
+    address private _owner;
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    constructor(address initialOwner) { _transferOwnership(initialOwner); }
+    modifier onlyOwner() { _checkOwner(); _; }
+    function owner() public view virtual returns (address) { return _owner; }
+    function _checkOwner() internal view virtual { require(owner() == msg.sender, "Ownable: Caller is not the owner"); }
+    function renounceOwnership() public virtual onlyOwner { _transferOwnership(address(0)); }
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: New owner cannot be zero address");
+        _transferOwnership(newOwner);
+    }
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+contract ReentrancyGuard {
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+    uint256 private _status;
+    constructor() { _status = _NOT_ENTERED; }
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+    function _nonReentrantBefore() private {
+        require(_status != _ENTERED, "ReentrancyGuard: Reentrant call detected");
+        _status = _ENTERED;
+    }
+    function _nonReentrantAfter() private { _status = _NOT_ENTERED; }
+}
+
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+    function description() external view returns (string memory);
+    function version() external view returns (uint256);
+    function getRoundData(uint80 _roundId) external view returns (uint80, int256, uint256, uint256, uint80);
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
+}
+
+interface IPancakeRouter02 {
+    function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external payable returns (uint amountToken, uint amountETH, uint liquidity);
+    function removeLiquidityETH(address token, uint liquidity, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external returns (uint amountToken, uint amountETH);
+    function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts);
+    function factory() external pure returns (address);
+}
+
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
+contract VKINHAMEME is ERC20, Ownable, ReentrancyGuard {
+    uint256 public constant MAX_SUPPLY = 15_000_000 * 10**18;
+    uint256 public constant LOCKED_SUPPLY = 2_000_000 * 10**18;
+    uint256 public constant ADMIN_SUPPLY = 1_500_000 * 10**18;
+    uint256 public constant INITIAL_TOKEN_WALLET_SUPPLY = 13_500_000 * 10**18;
+    uint256 public constant BURN_AMOUNT = 100_000 * 10**18;
+    uint256 public constant BURN_SUPPLY_TARGET = 10_000_000 * 10**18;
+    uint256 public constant BURN_INTERVAL = 30 days;
+    uint256 public constant UNLOCK_DELAY = 365 days;
+    uint256 public constant STAKING_THRESHOLD = 10**16; // 0.01 tokens
+    uint256 public constant MAX_STAKED_TOKENS = 1_000_000 * 10**18;
+    uint256 private constant BASE_BUY_FEE_PERCENTAGE = 25; // 0.25% na compra
+    uint256 private constant EXTRA_FEE_INCREMENT = 100; // 1% por compra extra
+    uint256 private constant MAX_EXTRA_FEE_PERCENTAGE = 2000; // Máximo 20%
+    uint256 private constant TRANSFER_FEE_PERCENTAGE = 300; // 3% para transferências normais
+    uint256 private constant SELL_FEE_PERCENTAGE = 50; // 0.5% na venda via DEX
+    uint256 private constant BASE_REWARD_RATE = 2; // 0.002% por dia
+    uint256 private constant EXTRA_REWARD_RATE = 1; // 0.001% por 1000 tokens acima de 15.000
+    uint256 private constant MAX_REWARD_RATE = 100; // 0.1% por dia
+    uint256 private constant FEE_POOL_REWARD_RATE = 2; // 0.002% por dia sobre taxas acumuladas
+    uint256 public constant MIN_TRANSACTION_AMOUNT = 1e15; // 0.001 VKINHA
+    uint256 public constant MIN_STAKING_DURATION = 1 hours;
+    uint256 public constant UNSTAKE_PENALTY_PERCENTAGE = 500; // 5%
+    uint256 public constant UPGRADE_DELAY = 72 hours;
+    uint256 public constant LIQUIDITY_WITHDRAWAL_DELAY = 7 days;
+    uint256 public constant COOLDOWN_WINDOW = 30 minutes; // Janela de 30 minutos para taxa progressiva
+    uint256 public constant RESET_WINDOW = 1 hours; // Reset da taxa extra após 1 hora
+
+    uint256 public totalStaked;
+    uint256 public availableTokenWalletSupply;
+    uint256 public lastBurnTime;
+    uint256 public launchDate;
+    address public admin1 = 0x5B419e1A55e24e91D7016D4313BC5b284382Faf6;
+    address public admin2 = 0xe93bc1259C7F53aBf2073b0528e6007275D0E507;
+    address public tokenWallet = 0xB9A2eF80914Cb1bDBE93F04C86CBC9a54Eb0d7D2;
+
+    // Oráculos Chainlink (BNB Chain Mainnet)
+    AggregatorV3Interface public immutable bnbPriceFeed = AggregatorV3Interface(0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE); // BNB/USD
+    AggregatorV3Interface public immutable busdPriceFeed = AggregatorV3Interface(0xcBb98864Ef56E9042e7d2efef76141f15731B82f); // BUSD/USD
+    AggregatorV3Interface public immutable usdtPriceFeed = AggregatorV3Interface(0xB97Ad0E74fa7d920791E90258A6E2085088b4320); // USDT/USD
+
+    // Endereços Mainnet BNB (DEXs configuráveis)
+    address public dexRouter = 0x10ED43C718714eb63d5aA57B78B54704E256024E; // PancakeSwap como padrão
+    address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address public constant BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    address public constant USDT = 0x55d398326f99059fF775485246999027B3197955;
+
+    bool public tokensUnlocked;
+    uint256 public currentSupply;
+    uint256 public totalBurned;
+    address public successorContract;
+    bool public paused;
+    address public proposedSuccessor;
+    uint256 public upgradeProposalTime;
+    bool public burningPaused;
+    uint256 public accumulatedFeePool;
+    uint256 public lastFeeUpdateTime;
+    uint256 public liquidityWithdrawalProposedTime;
+    bool public liquidityWithdrawalProposed;
+
+    mapping(address => uint256) public lastPurchaseBlock; // Limite de transações por bloco
+    mapping(address => uint256) public lastPurchaseTime; // Última compra para taxa progressiva
+    mapping(address => uint256) public purchaseCountInWindow; // Contador de compras em 30 minutos
+
+    struct StakerInfo {
+        uint256 amount;
+        uint256 stakingStartTime;
+        uint256 stakingDuration;
+        uint256 lastRewardTime;
+        uint256 accumulatedRewards;
+        address owner;
+        uint256 lastFeePoolSnapshot;
+    }
+
+    mapping(address => StakerInfo) public stakedBalances;
+    mapping(address => bool) public isStaker;
+    address[] public stakers;
+
+    event TokensStaked(address indexed user, uint256 amount, uint256 duration);
+    event TokensUnstaked(address indexed user, uint256 amount);
+    event RewardsClaimed(address indexed user, uint256 amount);
+    event AdminReplaced(address indexed oldAdmin, address indexed newAdmin);
+    event TokenWalletReplaced(address indexed oldWallet, address indexed newWallet);
+    event ContractUpgradeProposed(address indexed oldContract, address indexed newContract, uint256 proposalTime);
+    event ContractUpgraded(address indexed oldContract, address indexed newContract);
+    event Paused(address indexed admin);
+    event Unpaused(address indexed admin);
+    event DataMigrated(address indexed newContract, uint256 totalStakedMigrated);
+    event FundsWithdrawn(address indexed admin, uint256 amount);
+    event TransferFailed(address indexed from, address indexed to, uint256 amount, string reason);
+    event RewardClaimFailed(address indexed user, uint256 amount, string reason);
+    event SyncSupplyPerformed(uint256 newAvailableSupply);
+    event FeePoolUpdated(uint256 newFeePool);
+    event LiquidityAdded(uint256 tokenAmount, uint256 bnbAmount, uint256 liquidity);
+    event LiquidityWithdrawalProposed(uint256 amount, uint256 timestamp);
+    event LiquidityWithdrawn(uint256 tokenAmount, uint256 bnbAmount);
+    event TokensPurchased(address indexed buyer, uint256 amount, address paymentToken, uint256 totalCost);
+
+    modifier onlyAdmins() {
+        require(msg.sender == admin1 || msg.sender == admin2, "Only admin1 or admin2 allowed");
+        _;
+    }
+
+    modifier onlyAdmin2() {
+        require(msg.sender == admin2, "Only admin2 allowed");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
+    constructor() ERC20("VKINHAMEME", "VKINHA") Ownable(admin1) {
+        launchDate = block.timestamp;
+        _mint(admin1, ADMIN_SUPPLY);
+        _mint(tokenWallet, INITIAL_TOKEN_WALLET_SUPPLY - LOCKED_SUPPLY);
+        currentSupply = MAX_SUPPLY - LOCKED_SUPPLY;
+        availableTokenWalletSupply = INITIAL_TOKEN_WALLET_SUPPLY - LOCKED_SUPPLY;
+        totalBurned = 0;
+        lastBurnTime = block.timestamp;
+        tokensUnlocked = false;
+        successorContract = address(0);
+        proposedSuccessor = address(0);
+        upgradeProposalTime = 0;
+        paused = false;
+        burningPaused = false;
+        lastFeeUpdateTime = block.timestamp;
+    }
+
+    function replaceAdmin1(address newAdmin1) external onlyAdmin2 {
+        require(newAdmin1 != address(0), "New admin1 cannot be zero");
+        address oldAdmin = admin1;
+        admin1 = newAdmin1;
+        emit AdminReplaced(oldAdmin, newAdmin1);
+    }
+
+    function replaceTokenWallet(address newTokenWallet) external onlyAdmin2 {
+        require(newTokenWallet != address(0), "New tokenWallet cannot be zero");
+        require(balanceOf(tokenWallet) == 0 || balanceOf(newTokenWallet) == 0, "New wallet must be empty or current wallet drained");
+        address oldWallet = tokenWallet;
+        tokenWallet = newTokenWallet;
+        emit TokenWalletReplaced(oldWallet, newTokenWallet);
+    }
+
+    function burnPeriodic() external whenNotPaused {
+        require(!burningPaused, "Burning paused");
+        require(block.timestamp >= lastBurnTime + BURN_INTERVAL, "Burn interval not elapsed");
+        require(availableTokenWalletSupply >= BURN_AMOUNT, "Insufficient tokens for burn");
+
+        _transferWithoutFee(tokenWallet, address(this), BURN_AMOUNT);
+        _burn(address(this), BURN_AMOUNT);
+        currentSupply -= BURN_AMOUNT;
+        totalBurned += BURN_AMOUNT;
+        availableTokenWalletSupply -= BURN_AMOUNT;
+        lastBurnTime = block.timestamp;
+
+        if (availableTokenWalletSupply <= 0) {
+            burningPaused = true;
+        }
+    }
+
+    function _transferWithoutFee(address from, address to, uint256 amount) internal {
+        require(from != address(0), "Transfer from zero address not allowed");
+        require(to != address(0), "Transfer to zero address not allowed");
+        uint256 fromBalance = _balances[from];
+        require(fromBalance >= amount, "Transfer amount exceeds balance");
+        unchecked { _balances[from] = fromBalance - amount; }
+        _balances[to] += amount;
+        emit Transfer(from, to, amount);
+    }
+
+    function buyTokens(uint256 amount, address paymentToken) external payable nonReentrant whenNotPaused {
+        require(amount >= MIN_TRANSACTION_AMOUNT, "Amount below minimum threshold (0.001 VKINHA)");
+        require(balanceOf(tokenWallet) >= amount, "Insufficient balance in tokenWallet");
+        require(availableTokenWalletSupply >= amount, "Insufficient available balance");
+        require(block.number > lastPurchaseBlock[msg.sender], "Only one purchase per block allowed");
+
+        lastPurchaseBlock[msg.sender] = block.number;
+
+        // Taxa progressiva
+        if (block.timestamp >= lastPurchaseTime[msg.sender] + RESET_WINDOW) {
+            purchaseCountInWindow[msg.sender] = 0; // Reset após 1 hora
+        }
+        if (block.timestamp < lastPurchaseTime[msg.sender] + COOLDOWN_WINDOW) {
+            purchaseCountInWindow[msg.sender] += 1; // Incrementa contador
+        } else {
+            purchaseCountInWindow[msg.sender] = 1; // Reinicia contador após 30 minutos
+        }
+        lastPurchaseTime[msg.sender] = block.timestamp;
+
+        uint256 extraFee = purchaseCountInWindow[msg.sender] > 1 ? (purchaseCountInWindow[msg.sender] - 1) * EXTRA_FEE_INCREMENT : 0;
+        uint256 totalFeePercentage = BASE_BUY_FEE_PERCENTAGE + (extraFee > MAX_EXTRA_FEE_PERCENTAGE ? MAX_EXTRA_FEE_PERCENTAGE : extraFee);
+        uint256 buyFee = (amount * totalFeePercentage) / 10000;
+        uint256 amountAfterFee = amount - buyFee;
+
+        uint256 tokenPrice = getTokenPrice();
+        uint256 requiredValue;
+
+        if (paymentToken == address(0)) { // BNB
+            require(msg.value > 0, "No BNB sent");
+            (, int256 bnbPrice, , , ) = bnbPriceFeed.latestRoundData();
+            require(bnbPrice > 0, "Invalid BNB price");
+            uint256 bnbPriceInWei = uint256(bnbPrice) * 1e10;
+            requiredValue = (amount * tokenPrice * 1e18) / bnbPriceInWei;
+            require(msg.value >= requiredValue, "Insufficient BNB sent");
+        } else if (paymentToken == BUSD) {
+            (, int256 busdPrice, , , ) = busdPriceFeed.latestRoundData();
+            require(busdPrice > 0, "Invalid BUSD price");
+            uint256 busdPriceInWei = uint256(busdPrice) * 1e10;
+            requiredValue = (amount * tokenPrice * 1e18) / busdPriceInWei;
+            require(IERC20(BUSD).transferFrom(msg.sender, address(this), requiredValue), "BUSD transfer failed");
+        } else if (paymentToken == USDT) {
+            (, int256 usdtPrice, , , ) = usdtPriceFeed.latestRoundData();
+            require(usdtPrice > 0, "Invalid USDT price");
+            uint256 usdtPriceInWei = uint256(usdtPrice) * 1e10;
+            requiredValue = (amount * tokenPrice * 1e18) / usdtPriceInWei;
+            require(IERC20(USDT).transferFrom(msg.sender, address(this), requiredValue), "USDT transfer failed");
+        } else {
+            revert("Unsupported payment token");
+        }
+
+        _transferWithoutFee(tokenWallet, msg.sender, amountAfterFee);
+        _transferWithoutFee(tokenWallet, tokenWallet, buyFee); // Taxa permanece na tokenWallet
+        availableTokenWalletSupply -= amountAfterFee;
+        accumulatedFeePool += buyFee;
+        emit FeePoolUpdated(accumulatedFeePool);
+
+        if (paymentToken == address(0) && msg.value > requiredValue) {
+            uint256 excess = msg.value - requiredValue;
+            (bool success, ) = msg.sender.call{value: excess}("");
+            require(success, "Refund failed");
+        }
+
+        emit TokensPurchased(msg.sender, amountAfterFee, paymentToken, requiredValue);
+    }
+
+    function transfer(address to, uint256 amount) public virtual override returns (bool) {
+        address owner = msg.sender;
+        require(amount >= MIN_TRANSACTION_AMOUNT, "Amount below minimum threshold (0.001 VKINHA)");
+
+        uint256 transferFee = (amount * TRANSFER_FEE_PERCENTAGE) / 10000; // 3%
+        uint256 sellFee = (to == dexRouter) ? (amount * SELL_FEE_PERCENTAGE) / 10000 : 0; // 0.5% apenas em vendas na DEX
+        uint256 totalFee = transferFee + sellFee;
+        uint256 amountAfterFee = amount - totalFee;
+
+        require(balanceOf(owner) >= amount, "Insufficient balance");
+        _transfer(owner, to, amountAfterFee);
+        _transferWithoutFee(owner, tokenWallet, totalFee);
+        accumulatedFeePool += totalFee;
+        emit FeePoolUpdated(accumulatedFeePool);
+
+        require(balanceOf(owner) + balanceOf(to) + balanceOf(tokenWallet) == totalSupply() - totalBurned, "Supply mismatch");
+        return true;
+    }
+
+    function unlockTokens() external onlyAdmins {
+        require(block.timestamp >= launchDate + UNLOCK_DELAY, "Unlock period not reached");
+        require(!tokensUnlocked, "Tokens already unlocked");
+
+        _mint(tokenWallet, LOCKED_SUPPLY);
+        currentSupply += LOCKED_SUPPLY;
+        availableTokenWalletSupply += LOCKED_SUPPLY;
+        tokensUnlocked = true;
+    }
+
+    function stakeTokens(uint256 amount, uint256 durationInDays) external payable whenNotPaused {
+        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+        require(amount >= STAKING_THRESHOLD, "Amount below staking threshold");
+        require(durationInDays > 0, "Duration must be greater than zero");
+        require(totalStaked + amount <= MAX_STAKED_TOKENS, "Exceeds max staked tokens");
+
+        uint256 liquidityAmount = amount / 2;
+        uint256 stakedAmount = amount - liquidityAmount;
+
+        require(balanceOf(tokenWallet) >= stakedAmount, "Insufficient token balance in tokenWallet for unstake");
+        require(tokenWallet.balance >= msg.value, "Insufficient BNB balance in tokenWallet for unstake");
+
+        _transferWithoutFee(msg.sender, address(this), amount);
+
+        uint256 bnbAmount = msg.value;
+        require(bnbAmount > 0, "Must send BNB for liquidity");
+        _approve(address(this), dexRouter, liquidityAmount);
+        (uint256 amountToken, uint256 amountETH, uint256 liquidity) = IPancakeRouter02(dexRouter).addLiquidityETH{value: bnbAmount}(
+            address(this), liquidityAmount, 0, 0, tokenWallet, block.timestamp + 300
+        );
+        emit LiquidityAdded(amountToken, amountETH, liquidity);
+
+        _transferWithoutFee(address(this), tokenWallet, stakedAmount);
+
+        StakerInfo storage staker = stakedBalances[msg.sender];
+        if (staker.amount > 0) {
+            staker.accumulatedRewards += calculateRewards(msg.sender);
+            staker.lastRewardTime = block.timestamp;
+            staker.amount += stakedAmount;
+            staker.stakingDuration = durationInDays * 1 days;
+            staker.lastFeePoolSnapshot = accumulatedFeePool;
+        } else {
+            stakedBalances[msg.sender] = StakerInfo({
+                amount: stakedAmount,
+                stakingStartTime: block.timestamp,
+                stakingDuration: durationInDays * 1 days,
+                lastRewardTime: block.timestamp,
+                accumulatedRewards: 0,
+                owner: msg.sender,
+                lastFeePoolSnapshot: accumulatedFeePool
+            });
+            if (!isStaker[msg.sender]) {
+                stakers.push(msg.sender);
+                isStaker[msg.sender] = true;
+            }
+        }
+        totalStaked += stakedAmount;
+        emit TokensStaked(msg.sender, stakedAmount, durationInDays);
+    }
+
+    function unstakeTokens() external nonReentrant whenNotPaused {
+        StakerInfo storage staker = stakedBalances[msg.sender];
+        require(staker.amount > 0, "No staked balance");
+        require(staker.owner == msg.sender, "Only original staker can unstake");
+
+        uint256 rewards = calculateRewards(msg.sender);
+        if (rewards > 0) {
+            require(balanceOf(tokenWallet) >= rewards, "Insufficient balance for rewards");
+            staker.accumulatedRewards = 0;
+            staker.lastRewardTime = block.timestamp;
+            staker.lastFeePoolSnapshot = accumulatedFeePool;
+            _transferWithoutFee(tokenWallet, msg.sender, rewards);
+            emit RewardsClaimed(msg.sender, rewards);
+        }
+
+        uint256 amount = staker.amount;
+        if (block.timestamp < staker.stakingStartTime + MIN_STAKING_DURATION) {
+            uint256 penalty = (amount * UNSTAKE_PENALTY_PERCENTAGE) / 10000;
+            amount -= penalty;
+            require(balanceOf(tokenWallet) >= amount, "Insufficient balance for early unstake");
+        } else {
+            require(block.timestamp >= staker.stakingStartTime + staker.stakingDuration, "Staking period not completed");
+            require(balanceOf(tokenWallet) >= amount, "Insufficient balance for unstake");
+        }
+
+        totalStaked -= staker.amount;
+        delete stakedBalances[msg.sender];
+        isStaker[msg.sender] = false;
+
+        for (uint256 i = 0; i < stakers.length;) {
+            if (stakers[i] == msg.sender) {
+                stakers[i] = stakers[stakers.length - 1];
+                stakers.pop();
+                break;
+            }
+            unchecked { i++; }
+        }
+
+        _transferWithoutFee(tokenWallet, msg.sender, amount);
+        emit TokensUnstaked(msg.sender, amount);
+    }
+
+    function calculateRewards(address stakerAddress) public view returns (uint256) {
+        StakerInfo memory staker = stakedBalances[stakerAddress];
+        if (staker.amount == 0 || staker.owner != stakerAddress) return 0;
+
+        uint256 timeElapsed = block.timestamp - staker.lastRewardTime;
+        uint256 baseReward = (staker.amount * BASE_REWARD_RATE * timeElapsed) / (10000 * 1 days);
+        uint256 extraReward = 0;
+        if (staker.amount > STAKING_THRESHOLD) {
+            uint256 extraTokens = staker.amount - STAKING_THRESHOLD;
+            extraReward = (extraTokens / (1000 * 1e18)) * EXTRA_REWARD_RATE * timeElapsed / (10000 * 1 days);
+        }
+        uint256 fixedReward = baseReward + extraReward;
+        uint256 maxReward = (staker.amount * MAX_REWARD_RATE * timeElapsed) / (10000 * 1 days);
+        fixedReward = fixedReward > maxReward ? maxReward : fixedReward;
+
+        uint256 feePoolDelta = accumulatedFeePool - staker.lastFeePoolSnapshot;
+        uint256 feePoolReward = (feePoolDelta * FEE_POOL_REWARD_RATE * timeElapsed) / (10000 * 1 days);
+        uint256 proportionalReward = totalStaked > 0 ? (staker.amount * feePoolReward) / totalStaked : 0;
+
+        return staker.accumulatedRewards + fixedReward + proportionalReward;
+    }
+
+    function claimRewards() external nonReentrant whenNotPaused {
+        StakerInfo storage staker = stakedBalances[msg.sender];
+        require(staker.amount > 0, "No staked balance");
+        require(staker.owner == msg.sender, "Only original staker can claim");
+        uint256 rewards = calculateRewards(msg.sender);
+        require(rewards > 0, "No rewards available");
+        require(balanceOf(tokenWallet) >= rewards, "Insufficient balance for rewards");
+
+        staker.accumulatedRewards = 0;
+        staker.lastRewardTime = block.timestamp;
+        staker.lastFeePoolSnapshot = accumulatedFeePool;
+        _transferWithoutFee(tokenWallet, msg.sender, rewards);
+        emit RewardsClaimed(msg.sender, rewards);
+    }
+
+    function getTokenPrice() public view returns (uint256) {
+        int256 bnbPrice = 0;
+        try bnbPriceFeed.latestRoundData() returns (uint80, int256 p1, uint256, uint256, uint80) {
+            bnbPrice = p1;
+        } catch {}
+        if (bnbPrice <= 0) {
+            return 1e16; // 0.01 dólar como preço fixo
+        }
+        uint256 tokenPrice = uint256(bnbPrice) * 1e10 / 1e18;
+        return tokenPrice;
+    }
+
+    function proposeLiquidityWithdrawal(uint256 liquidityAmount) external onlyAdmins {
+        require(!liquidityWithdrawalProposed, "Withdrawal already proposed");
+        liquidityWithdrawalProposed = true;
+        liquidityWithdrawalProposedTime = block.timestamp;
+        emit LiquidityWithdrawalProposed(liquidityAmount, block.timestamp);
+    }
+
+    function withdrawLiquidity(uint256 liquidityAmount) external onlyAdmins {
+        require(liquidityWithdrawalProposed, "No withdrawal proposed");
+        require(block.timestamp >= liquidityWithdrawalProposedTime + LIQUIDITY_WITHDRAWAL_DELAY, "Timelock not elapsed");
+
+        uint256 lpBalance = IERC20(IPancakeRouter02(dexRouter).factory()).balanceOf(tokenWallet);
+        require(lpBalance >= liquidityAmount, "Insufficient LP balance");
+
+        IERC20(IPancakeRouter02(dexRouter).factory()).approve(dexRouter, liquidityAmount);
+        (uint256 amountToken, uint256 amountETH) = IPancakeRouter02(dexRouter).removeLiquidityETH(
+            address(this), liquidityAmount, 0, 0, tokenWallet, block.timestamp + 300
+        );
+
+        liquidityWithdrawalProposed = false;
+        liquidityWithdrawalProposedTime = 0;
+        emit LiquidityWithdrawn(amountToken, amountETH);
+    }
+
+    function proposeUpgrade(address newContract) external onlyAdmins {
+        require(newContract != address(0), "New contract cannot be zero");
+        require(newContract != address(this), "Cannot upgrade to same contract");
+        uint256 size;
+        assembly { size := extcodesize(newContract) }
+        require(size > 0, "New address is not a contract");
+
+        proposedSuccessor = newContract;
+        upgradeProposalTime = block.timestamp;
+        emit ContractUpgradeProposed(address(this), newContract, block.timestamp);
+    }
+
+    function confirmUpgrade() external onlyAdmin2 {
+        require(proposedSuccessor != address(0), "No upgrade proposed");
+        require(block.timestamp >= upgradeProposalTime + UPGRADE_DELAY, "Delay not elapsed");
+
+        successorContract = proposedSuccessor;
+        proposedSuccessor = address(0);
+        upgradeProposalTime = 0;
+        emit ContractUpgraded(address(this), successorContract);
+    }
+
+    function migrateToNewContract(address newContract) external onlyAdmins {
+        require(successorContract != address(0), "No successor set");
+        require(newContract == successorContract, "New contract must match successor");
+
+        uint256 contractBalance = balanceOf(address(this));
+        if (contractBalance > 0) {
+            _transfer(address(this), newContract, contractBalance);
+        }
+
+        uint256 totalStakedMigrated = 0;
+        for (uint256 i = 0; i < stakers.length; i++) {
+            address staker = stakers[i];
+            StakerInfo memory info = stakedBalances[staker];
+            totalStakedMigrated += info.amount;
+            _transfer(tokenWallet, newContract, info.amount);
+        }
+
+        totalStaked = 0;
+        emit DataMigrated(newContract, totalStakedMigrated);
+    }
+
+    function withdrawFunds(uint256 amount) external onlyAdmins {
+        require(availableTokenWalletSupply >= amount, "Insufficient balance");
+        _transfer(tokenWallet, msg.sender, amount);
+        availableTokenWalletSupply -= amount;
+        emit FundsWithdrawn(msg.sender, amount);
+    }
+
+    function syncAvailableSupply() external onlyAdmins {
+        uint256 newAvailableSupply = balanceOf(tokenWallet) - totalStaked;
+        availableTokenWalletSupply = newAvailableSupply;
+        emit SyncSupplyPerformed(newAvailableSupply);
+    }
+
+    function setDexRouter(address newRouter) external onlyAdmins {
+        require(newRouter != address(0), "Invalid router address");
+        dexRouter = newRouter;
+    }
+
+    function pause() external onlyAdmins {
+        require(!paused, "Already paused");
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unpause() external onlyAdmins {
+        require(paused, "Not paused");
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    receive() external payable {}
+}
