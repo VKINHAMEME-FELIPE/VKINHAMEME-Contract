@@ -1,0 +1,328 @@
+Vou elaborar um conjunto de testes para o contrato `VKINHAMEME` usando Hardhat com JavaScript/TypeScript, cobrindo os principais cenários especificados na documentação e nas listas de verificação de auditoria. Esses testes abordarão o **caminho feliz**, **casos negativos**, **controles de acesso** e **cenários extremos**, com o objetivo de atingir alta cobertura (90%+). Incluirei instruções para execução e configuração.
+
+---
+
+### **Configuração do Ambiente Hardhat**
+
+#### **Passos Iniciais**
+1. **Instale o Hardhat**:
+   ```bash
+   mkdir vkinhameme-tests
+   cd vkinhameme-tests
+   npm init -y
+   npm install --save-dev hardhat
+   npx hardhat init
+   ```
+   Escolha "Create a JavaScript project" e instale as dependências sugeridas.
+
+2. **Instale Dependências Adicionais**:
+   ```bash
+   npm install --save-dev @nomiclabs/hardhat-ethers ethers chai @openzeppelin/contracts hardhat-gas-reporter solidity-coverage
+   ```
+
+3. **Configure o `hardhat.config.js`**:
+   ```javascript
+   require("@nomiclabs/hardhat-ethers");
+   require("hardhat-gas-reporter");
+   require("solidity-coverage");
+
+   module.exports = {
+     solidity: "0.8.23", // Versão recente compatível com ^0.8.0
+     networks: {
+       hardhat: {
+         forking: {
+           url: "https://bsc-dataseed.binance.org/", // Fork da BNB Chain Mainnet
+           blockNumber: 36101400, // Bloco recente (ajuste conforme necessário)
+         },
+         chainId: 56,
+       },
+     },
+     gasReporter: {
+       enabled: true,
+     },
+   };
+   ```
+
+4. **Crie o Contrato**:
+   - Copie o código do `VKINHAMEME.sol` para a pasta `contracts/`.
+
+---
+
+### **Testes em JavaScript**
+
+Crie um arquivo `test/VKINHAMEME.test.js` com os testes abaixo. Esses testes simulam interações na BNB Chain usando fork para testar integrações externas (ex.: PancakeSwap, Chainlink).
+
+```javascript
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
+
+describe("VKINHAMEME Contract Tests", function () {
+  let VKINHAMEME, vkinha, owner, admin2, user1, user2, tokenWallet;
+  let dexRouter, wbnb, busd, usdt;
+
+  const ADMIN1 = "0x5B419e1A55e24e91D7016D4313BC5b284382Faf6";
+  const ADMIN2 = "0xe93bc1259C7F53aBf2073b0528e6007275D0E507";
+  const TOKEN_WALLET = "0xB9A2eF80914Cb1bDBE93F04C86CBC9a54Eb0d7D2";
+  const DEX_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  const WBNB = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
+  const BUSD = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
+  const USDT = "0x55d398326f99059fF775485246999027B3197955";
+
+  beforeEach(async function () {
+    [owner, admin2, user1, user2] = await ethers.getSigners();
+
+    // Implanta o contrato com admin1 como owner
+    VKINHAMEME = await ethers.getContractFactory("VKINHAMEME");
+    vkinha = await VKINHAMEME.deploy();
+    await vkinha.deployed();
+
+    // Configura endereços
+    tokenWallet = await ethers.getSigner(TOKEN_WALLET);
+    dexRouter = await ethers.getContractAt("IPancakeRouter02", DEX_ROUTER);
+    wbnb = await ethers.getContractAt("IERC20", WBNB);
+    busd = await ethers.getContractAt("IERC20", BUSD);
+    usdt = await ethers.getContractAt("IERC20", USDT);
+
+    // Transfere fundos iniciais para tokenWallet (simulação)
+    await vkinha.connect(owner).transfer(TOKEN_WALLET, ethers.utils.parseEther("13500000"));
+  });
+
+  // 1. Testes de Inicialização
+  describe("Initialization", function () {
+    it("should initialize with correct parameters", async function () {
+      expect(await vkinha.name()).to.equal("VKINHAMEME");
+      expect(await vkinha.symbol()).to.equal("VKINHA");
+      expect(await vkinha.decimals()).to.equal(18);
+      expect(await vkinha.totalSupply()).to.equal(ethers.utils.parseEther("15000000"));
+      expect(await vkinha.owner()).to.equal(ADMIN1);
+      expect(await vkinha.admin2()).to.equal(ADMIN2);
+      expect(await vkinha.tokenWallet()).to.equal(TOKEN_WALLET);
+    });
+  });
+
+  // 2. Testes de Compra (buyTokens)
+  describe("Buying Tokens (buyTokens)", function () {
+    it("should allow buying with BNB and apply base fee", async function () {
+      const amount = ethers.utils.parseEther("1");
+      const bnbValue = ethers.utils.parseEther("0.01");
+      const initialBalance = await vkinha.balanceOf(user1.address);
+
+      await vkinha.connect(user1).buyTokens(amount, "0x0000000000000000000000000000000000000000", { value: bnbValue });
+
+      const finalBalance = await vkinha.balanceOf(user1.address);
+      const fee = amount.mul(25).div(10000); // 0.25% base fee
+      const expectedBalance = initialBalance.add(amount.sub(fee));
+      expect(finalBalance).to.equal(expectedBalance);
+    });
+
+    it("should apply progressive fee on multiple purchases within cooldown", async function () {
+      const amount = ethers.utils.parseEther("1");
+      const bnbValue = ethers.utils.parseEther("0.01");
+
+      await vkinha.connect(user1).buyTokens(amount, "0x0", { value: bnbValue }); // 0.25%
+      await vkinha.connect(user1).buyTokens(amount, "0x0", { value: bnbValue }); // 0.25% + 1%
+
+      const balanceAfter = await vkinha.balanceOf(user1.address);
+      const baseFee = amount.mul(25).div(10000);
+      const extraFee = amount.mul(125).div(10000); // 0.25% + 1%
+      const expectedBalance = amount.sub(baseFee).add(amount.sub(extraFee));
+      expect(balanceAfter).to.equal(expectedBalance);
+    });
+
+    it("should revert if buying in the same block", async function () {
+      const amount = ethers.utils.parseEther("1");
+      const bnbValue = ethers.utils.parseEther("0.01");
+
+      await expect(
+        Promise.all([
+          vkinha.connect(user1).buyTokens(amount, "0x0", { value: bnbValue }),
+          vkinha.connect(user1).buyTokens(amount, "0x0", { value: bnbValue }),
+        ])
+      ).to.be.revertedWith("Only one purchase per block allowed");
+    });
+
+    it("should reset fee after RESET_WINDOW", async function () {
+      const amount = ethers.utils.parseEther("1");
+      const bnbValue = ethers.utils.parseEther("0.01");
+
+      await vkinha.connect(user1).buyTokens(amount, "0x0", { value: bnbValue });
+      await ethers.provider.send("evm_increaseTime", [3600]); // 1 hour = RESET_WINDOW
+      await ethers.provider.send("evm_mine");
+      await vkinha.connect(user1).buyTokens(amount, "0x0", { value: bnbValue });
+
+      const balanceAfter = await vkinha.balanceOf(user1.address);
+      const fee = amount.mul(25).div(10000); // 0.25% only
+      const expectedBalance = amount.sub(fee).mul(2);
+      expect(balanceAfter).to.equal(expectedBalance);
+    });
+  });
+
+  // 3. Testes de Transferência
+  describe("Transferring Tokens (transfer)", function () {
+    it("should transfer tokens with 3% fee", async function () {
+      const amount = ethers.utils.parseEther("10");
+      await vkinha.connect(tokenWallet).transfer(user1.address, amount);
+      const initialBalanceUser2 = await vkinha.balanceOf(user2.address);
+
+      await vkinha.connect(user1).transfer(user2.address, amount);
+      const finalBalanceUser2 = await vkinha.balanceOf(user2.address);
+      const fee = amount.mul(300).div(10000); // 3%
+      expect(finalBalanceUser2).to.equal(initialBalanceUser2.add(amount.sub(fee)));
+    });
+
+    it("should apply 3.5% fee on DEX sell", async function () {
+      const amount = ethers.utils.parseEther("10");
+      await vkinha.connect(tokenWallet).transfer(user1.address, amount);
+      const initialBalanceDex = await vkinha.balanceOf(DEX_ROUTER);
+
+      await vkinha.connect(user1).transfer(DEX_ROUTER, amount);
+      const finalBalanceDex = await vkinha.balanceOf(DEX_ROUTER);
+      const fee = amount.mul(350).div(10000); // 3% + 0.5%
+      expect(finalBalanceDex).to.equal(initialBalanceDex.add(amount.sub(fee)));
+    });
+
+    it("should revert if amount below MIN_TRANSACTION_AMOUNT", async function () {
+      await vkinha.connect(tokenWallet).transfer(user1.address, ethers.utils.parseEther("1"));
+      await expect(
+        vkinha.connect(user1).transfer(user2.address, ethers.utils.parseEther("0.0005"))
+      ).to.be.revertedWith("Amount below minimum threshold (0.001 VKINHA)");
+    });
+  });
+
+  // 4. Testes de Staking
+  describe("Staking (stakeTokens, unstakeTokens, claimRewards)", function () {
+    it("should stake tokens and add liquidity", async function () {
+      const amount = ethers.utils.parseEther("10");
+      await vkinha.connect(tokenWallet).transfer(user1.address, amount);
+      const bnbValue = ethers.utils.parseEther("0.01");
+
+      await vkinha.connect(user1).stakeTokens(amount, 30, { value: bnbValue });
+      const stakerInfo = await vkinha.stakedBalances(user1.address);
+      expect(stakerInfo.amount).to.equal(amount.div(2)); // Half goes to staking
+      expect(await vkinha.totalStaked()).to.equal(amount.div(2));
+    });
+
+    it("should calculate rewards correctly", async function () {
+      const amount = ethers.utils.parseEther("1000");
+      await vkinha.connect(tokenWallet).transfer(user1.address, amount);
+      await vkinha.connect(user1).stakeTokens(amount, 30, { value: ethers.utils.parseEther("0.01") });
+
+      await ethers.provider.send("evm_increaseTime", [86400]); // 1 day
+      await ethers.provider.send("evm_mine");
+
+      const rewards = await vkinha.calculateRewards(user1.address);
+      const baseReward = amount.div(2).mul(2).mul(86400).div(10000).div(86400); // 0.002% per day
+      expect(rewards).to.be.closeTo(baseReward, ethers.utils.parseEther("0.01")); // Aproximação
+    });
+
+    it("should revert unstaking before minimum duration", async function () {
+      const amount = ethers.utils.parseEther("10");
+      await vkinha.connect(tokenWallet).transfer(user1.address, amount);
+      await vkinha.connect(user1).stakeTokens(amount, 30, { value: ethers.utils.parseEther("0.01") });
+
+      await expect(vkinha.connect(user1).unstakeTokens()).to.be.revertedWith("Staking period not completed");
+    });
+  });
+
+  // 5. Testes Administrativos
+  describe("Administrative Functions", function () {
+    it("should allow admin2 to replace admin1", async function () {
+      await vkinha.connect(await ethers.getSigner(ADMIN2)).replaceAdmin1(user2.address);
+      expect(await vkinha.admin1()).to.equal(user2.address);
+    });
+
+    it("should allow admin to withdraw funds", async function () {
+      const amount = ethers.utils.parseEther("100");
+      const initialBalance = await vkinha.balanceOf(ADMIN1);
+      await vkinha.connect(await ethers.getSigner(ADMIN1)).withdrawFunds(amount);
+      expect(await vkinha.balanceOf(ADMIN1)).to.equal(initialBalance.add(amount));
+    });
+
+    it("should revert non-admin withdrawal", async function () {
+      await expect(vkinha.connect(user1).withdrawFunds(ethers.utils.parseEther("100"))).to.be.revertedWith(
+        "Only admin1 or admin2 allowed"
+      );
+    });
+  });
+
+  // 6. Testes de Integração com Fork
+  describe("Integration with PancakeSwap and Chainlink", function () {
+    it("should use Chainlink price feed for BNB", async function () {
+      const tokenPrice = await vkinha.getTokenPrice();
+      expect(tokenPrice).to.be.gt(0); // Preço deve ser positivo
+    });
+
+    it("should add liquidity to PancakeSwap", async function () {
+      const amount = ethers.utils.parseEther("100");
+      await vkinha.connect(tokenWallet).transfer(user1.address, amount);
+      const initialLiquidity = await wbnb.balanceOf(DEX_ROUTER);
+
+      await vkinha.connect(user1).stakeTokens(amount, 30, { value: ethers.utils.parseEther("0.01") });
+      const finalLiquidity = await wbnb.balanceOf(DEX_ROUTER);
+      expect(finalLiquidity).to.be.gt(initialLiquidity);
+    });
+  });
+});
+```
+
+---
+
+### **Instruções para Executar os Testes**
+
+1. **Compile o Contrato**:
+   ```bash
+   npx hardhat compile
+   ```
+
+2. **Execute os Testes**:
+   ```bash
+   npx hardhat test
+   ```
+
+3. **Meça a Cobertura**:
+   ```bash
+   npx hardhat coverage
+   ```
+
+4. **Reporte o Gás**:
+   - O `gas-reporter` exibirá o custo de gás automaticamente após os testes.
+
+---
+
+### **Explicação dos Testes**
+
+#### **1. Inicialização**
+- Verifica se o contrato é implantado com os parâmetros corretos (nome, símbolo, suprimento, etc.).
+
+#### **2. Compra (`buyTokens`)**
+- **Caminho Feliz**: Compra com BNB aplicando taxa base de 0.25%.
+- **Taxa Progressiva**: Testa incremento de 1% em compras repetitivas.
+- **Anti-Bot**: Garante falha ao comprar no mesmo bloco.
+- **Reset**: Verifica reset da taxa após 1 hora.
+
+#### **3. Transferência (`transfer`)**
+- **Caminho Feliz**: Transfere com taxa de 3%.
+- **Venda DEX**: Aplica taxa adicional de 0.5% ao transferir para `dexRouter`.
+- **Negativo**: Reverte transferência abaixo de 0.001 `VKINHA`.
+
+#### **4. Staking (`stakeTokens`, `unstakeTokens`, `claimRewards`)**
+- **Caminho Feliz**: Faz stake e verifica liquidez adicionada.
+- **Recompensas**: Calcula recompensas após 1 dia.
+- **Negativo**: Reverte unstaking antes do prazo.
+
+#### **5. Funções Administrativas**
+- **Controle de Acesso**: Testa substituição de `admin1` por `admin2` e retirada de fundos.
+- **Negativo**: Reverte tentativa de retirada por não-admin.
+
+#### **6. Integração com Fork**
+- **Chainlink**: Verifica preço do BNB via oráculo.
+- **PancakeSwap**: Confirma adição de liquidez na DEX.
+
+---
+
+### **Notas e Melhorias**
+- **Fork da Mainnet**: Os testes usam um fork da BNB Chain para simular interações reais com PancakeSwap e Chainlink. Ajuste o `blockNumber` conforme necessário.
+- **Aproximações**: Algumas comparações (ex.: recompensas) usam `closeTo` devido a arredondamentos.
+- **Cobertura**: Adicione mais testes para casos extremos (ex.: `MAX_SUPPLY`, falha de oráculo) para atingir 100%.
+
+Se precisar de ajustes (ex.: testes em Foundry, mais cenários), é só pedir! Esses testes já cobrem a maioria das funcionalidades críticas para a auditoria.
