@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="description" content="Site oficial do token VKINHA">
+  <meta name="robots" content="index, follow">
+  <meta name="author" content="VKINHA Team">
+  <title>VKINHA</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      background: url('https://via.placeholder.com/1920x1080/87CEEB/FFFFFF?text=Céu+Azul+Fazenda') no-repeat center center fixed;
+      background-size: cover;
+      color: #ffffff;
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      position: relative;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: -1;
+    }
+    .coin {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #FFD700;
+      border-radius: 50%;
+      animation: fall 5s linear infinite;
+      z-index: -1;
+    }
+    @keyframes fall {
+      0% { transform: translateY(-100vh); opacity: 1; }
+      100% { transform: translateY(100vh); opacity: 0; }
+    }
+    .navbar-custom {
+      background-color: #0d0d0d;
+      padding: 10px 20px;
+      width: 100vw;
+      max-width: none;
+      border-bottom: 2px solid;
+      border-image: linear-gradient(45deg, red, green, blue) 1;
+      animation: rgbBorder 3s infinite;
+    }
+    @keyframes rgbBorder {
+      0% { border-image: linear-gradient(45deg, red, green, blue) 1; }
+      50% { border-image: linear-gradient(45deg, blue, red, green) 1; }
+      100% { border-image: linear-gradient(45deg, green, blue, red) 1; }
+    }
+    .navbar-custom .nav-link { 
+      color: #ffffff; 
+      transition: color 0.3s ease;
+      display: flex;
+      align-items: center;
+    }
+    .navbar-custom .nav-link:hover { 
+      color: #006400;
+      animation: pulse 0.3s ease-in-out;
+    }
+    .card {
+      background-color: rgba(45, 45, 45, 0.9);
+      border: none;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .notification {
+      position: fixed; 
+      bottom: 20px; 
+      right: 20px; 
+      z-index: 1000;
+      background-color: #006400;
+      color: #ffffff;
+      border-radius: 5px;
+      padding: 15px;
+      animation: fadeIn 0.3s ease-in;
+    }
+    .footer-text { 
+      font-size: 10px; 
+      color: #6c757d; 
+    }
+    .page-section { 
+      display: none; 
+    }
+    .page-section.active { 
+      display: block; 
+    }
+    .modal-content {
+      background-color: #2d2d2d;
+      color: #ffffff;
+      border-radius: 10px;
+    }
+    .modal-header, .modal-footer { 
+      border-color: #006400; 
+    }
+    .btn-primary, .btn-secondary {
+      background-color: #0d0d0d;
+      border: none;
+      color: #ffffff;
+      padding: 5px 8px;
+      border-radius: 5px;
+      transition: all 0.3s ease;
+      width: 60px;
+      text-align: center;
+      font-weight: bold;
+    }
+    .btn-primary:hover, .btn-secondary:hover {
+      background-color: #004d00;
+      transform: scale(1.05);
+    }
+    .btn-primary:active, .btn-secondary:active {
+      background-color: #003300 !important;
+      animation: clickPulse 0.2s ease-in-out;
+    }
+    .buy-button {
+      background: none;
+      border: none;
+      padding: 0;
+      width: 60px;
+      height: 32px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+    .refresh-icon {
+      font-size: 1.2rem;
+      animation: spin 1s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .dropdown-menu, .info-dropdown, .action-dropdown, .buy-dropdown {
+      background: linear-gradient(135deg, #003300, #006400);
+      border: 1px solid #006400;
+      border-radius: 10px;
+      padding: 10px;
+      color: #ffffff;
+      width: 200px;
+      font-size: 0.733rem;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      text-align: left;
+    }
+    .info-dropdown p {
+      margin: 3px 0;
+      padding: 3px 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 5px;
+    }
+    .dropdown-item { 
+      color: #ffffff; 
+      padding: 5px 10px;
+      background: none;
+      border: none;
+      text-align: left;
+      transition: color 0.3s ease;
+    }
+    .dropdown-item:hover { 
+      color: #ffd700; 
+    }
+    .balao-numero {
+      display: inline-block;
+      background-color: #006400;
+      color: #ffffff;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+      font-size: 10px;
+      margin-right: 5px;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    @keyframes clickPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .form-control, .form-select {
+      background-color: #3a3a3a;
+      border-color: #006400;
+      color: #ffffff;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.733rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #004d00;
+      box-shadow: 0 0 5px rgba(0, 100, 0, 0.5);
+    }
+    .wallet-dropdown, .info-dropdown, .action-dropdown, .buy-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      z-index: 1000;
+      display: none;
+    }
+    .wallet-dropdown button {
+      display: block;
+      margin: 5px 0;
+      background: none;
+      border: none;
+      color: #ffffff;
+      cursor: pointer;
+      padding: 8px;
+      width: 100%;
+      text-align: left;
+      transition: color 0.3s ease;
+    }
+    .wallet-dropdown button:hover {
+      color: #ffd700;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      width: 100%;
+    }
+    .container {
+      width: 100vw;
+      max-width: none;
+      padding: 0 20px;
+    }
+    footer {
+      border-top: 2px solid;
+      border-image: linear-gradient(45deg, red, green, blue) 1;
+      animation: rgbBorder 3s infinite;
+      position: relative;
+    }
+    .footer-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 0 20px;
+    }
+    .footer-text {
+      text-align: left;
+    }
+    .ads-container {
+      display: flex;
+      gap: 10px;
+      margin-right: 40px;
+    }
+    .ad-square {
+      width: 120px;
+      height: 90px;
+      background-color: #ffffff;
+      border: 1px solid #006400;
+    }
+    .highlight-supply {
+      display: inline-block;
+      background-color: #003300;
+      color: #ffffff;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-weight: bold;
+    }
+    .hidden {
+      display: none;
+    }
+    .right-buttons {
+      position: absolute;
+      right: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .info-dropdown.connect-message {
+      width: 150px;
+      text-align: center;
+      padding: 15px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar com abas -->
+  <nav class="navbar navbar-expand-lg navbar-custom">
+    <div class="container">
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav me-auto align-items-center">
+          <li class="nav-item"><a class="nav-link" href="#" onclick="showPage('principal')"><i class="bi bi-arrow-repeat refresh-icon"></i></a></li>
+          <li class="nav-item"><a class="nav-link" href="#" onclick="showPage('roadmap')">Roadmap</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" onclick="showPage('whitepaper')">Whitepaper</a></li>
+          <li class="nav-item"><a class="nav-link" href="documentacao.html" target="_blank">Documentação</a></li>
+          <li class="nav-item"><a class="nav-link" href="#" onclick="$('#pancakeSwapModal').modal('show');"><img src="https://pancakeswap.finance/favicon.ico" alt="PancakeSwap" style="width: 16px;"></a></li>
+          <li class="nav-item"><a class="nav-link" href="https://www.coingecko.com/pt" target="_blank"><img src="https://www.coingecko.com/favicon.ico" alt="CoinGecko" style="width: 16px;"></a></li>
+          <li class="nav-item"><a class="nav-link" href="https://coinmarketcap.com" target="_blank"><img src="https://coinmarketcap.com/favicon.ico" alt="CoinMarketCap" style="width: 16px;"></a></li>
+        </ul>
+        <div class="action-buttons">
+          <div class="dropdown" style="position: relative;">
+            <button class="btn btn-primary buy-button" id="buyButton">Comprar</button>
+            <div class="buy-dropdown" id="buyDropdown">
+              <input class="form-control mb-3" id="buyAmount" type="number" placeholder="Quantidade (VKINHA)" step="0.01" oninput="estimateBuyCost()">
+              <select class="form-select mb-3" id="paymentToken" onchange="estimateBuyCost()">
+                <option value="0x0000000000000000000000000000000000000000">BNB</option>
+                <option value="0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56">BUSD</option>
+                <option value="0x55d398326f99059fF775485246999027B3197955">USDT</option>
+              </select>
+              <p>Custo estimado: <span id="buyCost">0.00</span> <span id="buyCurrency">BNB</span></p>
+              <button class="btn btn-primary" id="buyConfirmButton" style="font-size: 0.733rem;">Confirmar</button>
+            </div>
+          </div>
+          <div class="right-buttons">
+            <div class="dropdown" style="position: relative;">
+              <button class="btn btn-primary" id="walletButton">Wallet</button>
+              <div class="wallet-dropdown" id="walletDropdown">
+                <button onclick="connectWallet('metamask')"><img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" alt="MetaMask" style="width: 24px;"></button>
+                <button onclick="connectWallet('coinbase')"><img src="https://www.coinbase.com/favicon.ico" alt="Coinbase" style="width: 24px;"></button>
+              </div>
+            </div>
+            <div class="dropdown" style="position: relative;">
+              <button class="btn btn-primary" id="infoButton">Conta</button>
+              <div class="info-dropdown" id="infoDropdown">
+                <div id="connectMessage" class="connect-message">Conecte em sua carteira</div>
+                <div id="accountInfo" class="hidden">
+                  <p>Saldo de VKINHA: <span id="balance">1500000.0</span></p>
+                  <p>Total Staked: <span id="totalStaked" class="balao-numero">0.0</span></p>
+                  <p>Recompensas acumuladas: <span id="rewards">0.0</span></p>
+                  <p>Tokens disponíveis para unstake: <span id="unstakeAmount">0</span></p>
+                  <p>Valor disponível para claim: <span id="claimAmount">0.0</span></p>
+                  <button class="btn btn-primary dropdown-item" id="transferButton">Transferir</button>
+                  <button class="btn btn-primary dropdown-item" id="stakeButton">Fazer Stake</button>
+                  <button class="btn btn-primary dropdown-item" id="unstakeButton">Retirar Stake</button>
+                  <button class="btn btn-primary dropdown-item" id="claimButton">Retirar Claim</button>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="googleButton" onclick="google.accounts.id.prompt();"><img src="https://www.google.com/favicon.ico" alt="Google" style="width: 16px;"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Seções de Páginas -->
+  <div class="container mt-5">
+    <div id="principal" class="page-section active">
+      <div class="row justify-content-center">
+        <div class="col-md-8">
+          <div class="card p-4 mb-4">
+            <!-- Conteúdo da página principal -->
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="roadmap" class="page-section">
+      <div class="row justify-content-center">
+        <div class="col-md-8">
+          <div class="card p-4 mb-4">
+            <h1 class="text-center mb-4" style="color: #006400;">Roadmap</h1>
+            <p>Conteúdo da Roadmap aqui.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="whitepaper" class="page-section">
+      <div class="row justify-content-center">
+        <div class="col-md-8">
+          <div class="card p-4 mb-4">
+            <h1 class="text-center mb-4" style="color: #006400;">Whitepaper</h1>
+            <p>Conteúdo do Whitepaper aqui.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="documentacao" class="page-section">
+      <div class="row justify-content-center">
+        <div class="col-md-8">
+          <div class="card p-4 mb-4">
+            <h1 class="text-center mb-4" style="color: #006400;">Documentação</h1>
+            <p>Conteúdo movido para documentacao.html</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Swap do PancakeSwap -->
+  <div class="modal fade" id="pancakeSwapModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="color: #006400;">Swap VKINHA</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="filter: invert(1);"></button>
+        </div>
+        <div class="modal-body">
+          <iframe src="https://pancakeswap.finance/swap?outputCurrency=0x84e22573C287CBC08827d17936A2543c1697896f" width="100%" height="600" frameborder="0" style="border: 1px solid #006400;"></iframe>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-dark py-4 mt-5">
+    <div class="container footer-container">
+      <div class="footer-text">
+        <p class="mb-2">
+          <a href="https://t.me/vknhacoin" target="_blank" style="color: #ffffff;">Telegram t.me/vknhacoin</a> |
+          <a href="https://x.com/vkinhacoin" target="_blank" style="color: #ffffff;">Twitter @vkinhacoin</a> |
+          <a href="https://instagram.com/vkinhacoin" target="_blank" style="color: #ffffff;">Instagram @vkinhacoin</a> |
+          <a href="https://bscscan.com/token/0x84e22573C287CBC08827d17936A2543c1697896f#code" target="_blank" style="color: #ffffff;">BscScan</a>
+        </p>
+        <p class="footer-text">
+          *Ação "Aprovar": Permite que outro endereço gaste seus tokens VKINHA. Necessário antes de comprar ou fazer stake.<br>
+          <span class="highlight-supply">Nome: VKINHA, Total Supply: <span id="totalSupplyFooter">13000000.0</span> VKINHA</span>
+        </p>
+      </div>
+      <div class="ads-container">
+        <div class="ad-square"></div>
+        <div class="ad-square"></div>
+        <div class="ad-square"></div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Notificação -->
+  <div class="notification alert alert-success" id="notification" style="display: none;"></div>
+
+  <script>
+    const contractAddress = '0x84e22573C287CBC08827d17936A2543c1697896f';
+    let provider, signer, contract, walletType = null;
+    const abi = [
+      {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"address","name":"paymentToken","type":"address"}],"name":"buyTokens","outputs":[],"stateMutability":"payable","type":"function"},
+      {"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},
+      {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"durationInDays","type":"uint256"}],"name":"stakeTokens","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"unstakeTokens","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      {"inputs":[],"name":"claimRewards","outputs":[],"stateMutability":"nonpayable","type":"function"},
+      {"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+      {"inputs":[{"internalType":"address","name":"stakerAddress","type":"address"}],"name":"calculateRewards","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+      {"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"stakedBalances","outputs":[{"components":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"stakingStartTime","type":"uint256"},{"internalType":"uint256","name":"stakingDuration","type":"uint256"},{"internalType":"uint256","name":"accumulatedRewards","type":"uint256"}],"internalType":"struct VKINHAMEME.Staker","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},
+      {"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+      {"inputs":[],"name":"totalStaked","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+      {"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"}
+    ];
+
+    // Suprimir logs do PancakeSwap
+    (function() {
+      const originalConsoleLog = console.log;
+      console.log = function(...args) {
+        if (args.some(arg => typeof arg === 'string' && arg.includes('pancakeswap.finance'))) return;
+        originalConsoleLog.apply(console, args);
+      };
+      const originalConsoleWarn = console.warn;
+      console.warn = function(...args) {
+        if (args.some(arg => typeof arg === 'string' && arg.includes('Swiper Loop Warning'))) return;
+        originalConsoleWarn.apply(console, args);
+      };
+    })();
+
+    // Adicionar moedas caindo
+    function addCoins() {
+      for (let i = 0; i < 10; i++) {
+        const coin = document.createElement('div');
+        coin.className = 'coin';
+        coin.style.left = Math.random() * 100 + 'vw';
+        coin.style.animationDelay = Math.random() * 5 + 's';
+        document.body.appendChild(coin);
+      }
+    }
+    addCoins();
+
+    // Google Sign-In
+    function handleCredentialResponse(response) {
+      console.log("Encoded JWT ID token: " + response.credential);
+      showNotification('Conectado com Google com sucesso!');
+    }
+    window.onload = function () {
+      google.accounts.id.initialize({
+        client_id: "YOUR_GOOGLE_CLIENT_ID", // Substitua pelo seu Client ID do Google
+        callback: handleCredentialResponse
+      });
+    };
+
+    function showPage(pageId) {
+      document.querySelectorAll('.page-section').forEach(section => section.classList.remove('active'));
+      document.getElementById(pageId).classList.add('active');
+    }
+
+    function showNotification(message, isError = false) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = `notification alert ${isError ? 'alert-danger' : 'alert-success'}`;
+      notification.style.display = 'block';
+      setTimeout(() => notification.style.display = 'none', 5000);
+    }
+
+    function toggleDropdown(id) {
+      const dropdown = document.getElementById(id);
+      dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+    }
+
+    document.getElementById('walletButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('walletDropdown');
+    });
+
+    document.getElementById('buyButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('buyDropdown');
+    });
+
+    document.getElementById('infoButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('infoDropdown');
+    });
+
+    document.getElementById('transferButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('transferDropdown');
+    });
+
+    document.getElementById('stakeButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('stakeDropdown');
+    });
+
+    document.getElementById('unstakeButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('unstakeDropdown');
+    });
+
+    document.getElementById('claimButton').addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleDropdown('claimDropdown');
+    });
+
+    document.addEventListener('click', (e) => {
+      const walletDropdown = document.getElementById('walletDropdown');
+      const buyDropdown = document.getElementById('buyDropdown');
+      const infoDropdown = document.getElementById('infoDropdown');
+      const transferDropdown = document.getElementById('transferDropdown');
+      const stakeDropdown = document.getElementById('stakeDropdown');
+      const unstakeDropdown = document.getElementById('unstakeDropdown');
+      const claimDropdown = document.getElementById('claimDropdown');
+      const walletButton = document.getElementById('walletButton');
+      const buyButton = document.getElementById('buyButton');
+      const infoButton = document.getElementById('infoButton');
+      const transferButton = document.getElementById('transferButton');
+      const stakeButton = document.getElementById('stakeButton');
+      const unstakeButton = document.getElementById('unstakeButton');
+      const claimButton = document.getElementById('claimButton');
+
+      if (!walletButton.contains(e.target) && !walletDropdown.contains(e.target)) {
+        walletDropdown.style.display = 'none';
+      }
+      if (!buyButton.contains(e.target) && !buyDropdown.contains(e.target)) {
+        buyDropdown.style.display = 'none';
+      }
+      if (!infoButton.contains(e.target) && !infoDropdown.contains(e.target)) {
+        infoDropdown.style.display = 'none';
+      }
+      if (transferButton && !transferButton.contains(e.target) && !transferDropdown.contains(e.target)) {
+        transferDropdown.style.display = 'none';
+      }
+      if (stakeButton && !stakeButton.contains(e.target) && !stakeDropdown.contains(e.target)) {
+        stakeDropdown.style.display = 'none';
+      }
+      if (unstakeButton && !unstakeButton.contains(e.target) && !unstakeDropdown.contains(e.target)) {
+        unstakeDropdown.style.display = 'none';
+      }
+      if (claimButton && !claimButton.contains(e.target) && !claimDropdown.contains(e.target)) {
+        claimDropdown.style.display = 'none';
+      }
+    });
+
+    async function connectWallet(wallet) {
+      try {
+        if (wallet === 'metamask' && window.ethereum && window.ethereum.isMetaMask) {
+          showNotification('Conectando ao MetaMask...');
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          provider = new ethers.BrowserProvider(window.ethereum);
+        } else if (wallet === 'coinbase' && window.ethereum && window.ethereum.isCoinbaseWallet) {
+          showNotification('Conectando ao Coinbase Wallet...');
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          provider = new ethers.BrowserProvider(window.ethereum);
+        } else {
+          throw new Error('Carteira não suportada ou não detectada.');
+        }
+
+        signer = await provider.getSigner();
+        contract = new ethers.Contract(contractAddress, abi, signer);
+        walletType = wallet;
+
+        setTimeout(() => {
+          disconnectWallet();
+          showNotification('Sessão expirada. Conecte-se novamente.');
+        }, 900000);
+
+        document.getElementById('connectMessage').classList.add('hidden');
+        document.getElementById('accountInfo').classList.remove('hidden');
+        document.getElementById('infoDropdown').innerHTML = `
+          <p>Saldo de VKINHA: <span id="balance">1500000.0</span></p>
+          <p>Total Staked: <span id="totalStaked" class="balao-numero">0.0</span></p>
+          <p>Recompensas acumuladas: <span id="rewards">0.0</span></p>
+          <p>Tokens disponíveis para unstake: <span id="unstakeAmount">0</span></p>
+          <p>Valor disponível para claim: <span id="claimAmount">0.0</span></p>
+          <button class="btn btn-primary dropdown-item" id="transferButton">Transferir</button>
+          <div class="action-dropdown" id="transferDropdown" style="display: none;">
+            <select class="form-select mb-3" id="transferToken">
+              <option value="0x84e22573C287CBC08827d17936A2543c1697896f">VKINHA</option>
+              <option value="0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56">BUSD</option>
+            </select>
+            <input class="form-control mb-3" id="transferAmount" type="number" placeholder="Quantidade" step="0.01">
+            <input class="form-control mb-3" id="transferAddress" type="text" placeholder="Endereço de destino">
+            <button class="btn btn-primary" id="transferConfirmButton" style="font-size: 0.733rem;">Confirmar</button>
+          </div>
+          <button class="btn btn-primary dropdown-item" id="stakeButton">Fazer Stake</button>
+          <div class="action-dropdown" id="stakeDropdown" style="display: none;">
+            <select class="form-select mb-3" id="stakeToken">
+              <option value="0x84e22573C287CBC08827d17936A2543c1697896f">VKINHA</option>
+            </select>
+            <input class="form-control mb-3" id="stakeAmount" type="number" placeholder="Quantidade" step="0.01">
+            <input class="form-control mb-3" id="stakeDays" type="number" placeholder="Dias" step="1">
+            <button class="btn btn-primary" id="stakeConfirmButton" style="font-size: 0.733rem;">Confirmar</button>
+          </div>
+          <button class="btn btn-primary dropdown-item" id="unstakeButton">Retirar Stake</button>
+          <div class="action-dropdown" id="unstakeDropdown" style="display: none;">
+            <p>Tokens disponíveis: <span id="unstakeAmountDropdown">0</span></p>
+            <button class="btn btn-primary" id="unstakeConfirmButton" style="font-size: 0.733rem;">Confirmar</button>
+          </div>
+          <button class="btn btn-primary dropdown-item" id="claimButton">Retirar Claim</button>
+          <div class="action-dropdown" id="claimDropdown" style="display: none;">
+            <p>Valor disponível: <span id="claimAmountDropdown">0.0</span></p>
+            <button class="btn btn-primary" id="claimConfirmButton" style="font-size: 0.733rem;">Confirmar</button>
+          </div>
+        `;
+
+        await updateAllInfo();
+        showNotification('Carteira conectada com sucesso!');
+      } catch (error) {
+        console.error(`Erro ao conectar ${wallet}:`, error);
+        showNotification(`Erro ao conectar: ${error.message}`, true);
+      }
+    }
+
+    async function disconnectWallet() {
+      provider = null;
+      signer = null;
+      contract = null;
+      walletType = null;
+
+      document.getElementById('connectMessage').classList.remove('hidden');
+      document.getElementById('accountInfo').classList.add('hidden');
+      document.getElementById('infoDropdown').innerHTML = `
+        <div id="connectMessage">Conecte em sua carteira</div>
+        <div id="accountInfo" class="hidden">
+          <p>Saldo de VKINHA: <span id="balance">1500000.0</span></p>
+          <p>Total Staked: <span id="totalStaked" class="balao-numero">0.0</span></p>
+          <p>Recompensas acumuladas: <span id="rewards">0.0</span></p>
+          <p>Tokens disponíveis para unstake: <span id="unstakeAmount">0</span></p>
+          <p>Valor disponível para claim: <span id="claimAmount">0.0</span></p>
+          <button class="btn btn-primary dropdown-item" id="transferButton">Transferir</button>
+          <button class="btn btn-primary dropdown-item" id="stakeButton">Fazer Stake</button>
+          <button class="btn btn-primary dropdown-item" id="unstakeButton">Retirar Stake</button>
+          <button class="btn btn-primary dropdown-item" id="claimButton">Retirar Claim</button>
+        </div>
+      `;
+
+      document.getElementById('balance').innerText = '1500000.0';
+      document.getElementById('totalStaked').innerText = '0.0';
+      document.getElementById('rewards').innerText = '0.0';
+      document.getElementById('unstakeAmount').innerText = '0';
+      document.getElementById('claimAmount').innerText = '0.0';
+      document.getElementById('totalSupplyFooter').innerText = '13000000.0';
+      showNotification('Carteira desconectada.');
+    }
+
+    async function updateAllInfo() {
+      try {
+        if (contract) {
+          const totalSupply = await contract.totalSupply();
+          document.getElementById('totalSupplyFooter').innerText = ethers.formatEther(totalSupply);
+          await loadBalance();
+          await loadRewards();
+          await loadUnstakeAmount();
+        }
+      } catch (error) {
+        console.error('Erro ao atualizar informações:', error);
+        showNotification('Erro ao atualizar informações. Verifique a conexão com a carteira.', true);
+      }
+    }
+
+    async function estimateBuyCost() {
+      try {
+        const amount = ethers.parseEther(document.getElementById('buyAmount').value || '0');
+        const paymentToken = document.getElementById('paymentToken').value;
+        let cost = ethers.parseEther('0.01');
+        if (contract) {
+          cost = amount.mul(ethers.parseEther('0.01')).div(ethers.parseEther('1'));
+        }
+        document.getElementById('buyCost').innerText = ethers.formatEther(cost);
+        document.getElementById('buyCurrency').innerText = paymentToken === '0x0000000000000000000000000000000000000000' ? 'BNB' : paymentToken === '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56' ? 'BUSD' : 'USDT';
+      } catch (error) {
+        document.getElementById('buyCost').innerText = '0.00';
+      }
+    }
+
+    async function loadBalance() {
+      try {
+        if (!signer || !contract) return;
+        const address = await signer.getAddress();
+        const balance = await contract.balanceOf(address);
+        document.getElementById('balance').innerText = ethers.formatEther(balance);
+      } catch (error) {
+        document.getElementById('balance').innerText = '1500000.0';
+      }
+    }
+
+    async function loadRewards() {
+      try {
+        if (!signer || !contract) return;
+        const address = await signer.getAddress();
+        const rewards = await contract.calculateRewards(address);
+        document.getElementById('rewards').innerText = ethers.formatEther(rewards);
+        document.getElementById('claimAmount').innerText = ethers.formatEther(rewards);
+        document.getElementById('claimAmountDropdown').innerText = ethers.formatEther(rewards);
+      } catch (error) {
+        document.getElementById('rewards').innerText = '0.0';
+        document.getElementById('claimAmount').innerText = '0.0';
+        document.getElementById('claimAmountDropdown').innerText = '0.0';
+      }
+    }
+
+    async function loadUnstakeAmount() {
+      try {
+        if (!signer || !contract) return;
+        const address = await signer.getAddress();
+        const stakerInfo = await contract.stakedBalances(address);
+        let amount = ethers.formatEther(stakerInfo.amount);
+        const stakingStartTime = Number(stakerInfo.stakingStartTime);
+        const stakingDuration = Number(stakerInfo.stakingDuration);
+        const currentTime = Math.floor(Date.now() / 1000);
+
+        if (amount === "0.0" || stakerInfo.owner !== address) {
+          document.getElementById('unstakeAmount').innerText = '0';
+          document.getElementById('unstakeAmountDropdown').innerText = '0';
+          document.getElementById('totalStaked').innerText = '0.0';
+          return;
+        }
+
+        if (currentTime < stakingStartTime + stakingDuration) {
+          amount = 0;
+        }
+        document.getElementById('unstakeAmount').innerText = amount;
+        document.getElementById('unstakeAmountDropdown').innerText = amount;
+        document.getElementById('totalStaked').innerText = ethers.formatEther(stakerInfo.amount);
+      } catch (error) {
+        document.getElementById('unstakeAmount').innerText = '0';
+        document.getElementById('unstakeAmountDropdown').innerText = '0';
+        document.getElementById('totalStaked').innerText = '0.0';
+      }
+    }
+
+    document.getElementById('buyConfirmButton').addEventListener('click', async () => {
+      try {
+        if (!contract) throw new Error('Conecte uma carteira primeiro.');
+        const amount = ethers.parseEther(document.getElementById('buyAmount').value);
+        const paymentToken = document.getElementById('paymentToken').value;
+        const approveTx = await contract.approve(contractAddress, amount, { gasLimit: 100000 });
+        await approveTx.wait();
+        const tx = await contract.buyTokens(amount, paymentToken, { value: ethers.parseEther('0.01'), gasLimit: 100000 });
+        await tx.wait();
+        showNotification('Compra realizada com sucesso!');
+        updateAllInfo();
+        toggleDropdown('buyDropdown');
+      } catch (error) {
+        if (error.code === 'ACTION_REJECTED') {
+          showNotification('Transação não autorizada', true);
+        } else {
+          showNotification(`Erro na compra: ${error.message}`, true);
+        }
+      }
+    });
+
+    document.addEventListener('click', async (e) => {
+      if (e.target.id === 'transferConfirmButton') {
+        try {
+          if (!contract) throw new Error('Conecte uma carteira primeiro.');
+          const amount = ethers.parseEther(document.getElementById('transferAmount').value);
+          const to = document.getElementById('transferAddress').value;
+          const tx = await contract.transfer(to, amount, { gasLimit: 100000 });
+          await tx.wait();
+          showNotification('Transferência realizada com sucesso!');
+          updateAllInfo();
+          toggleDropdown('transferDropdown');
+        } catch (error) {
+          if (error.code === 'ACTION_REJECTED') {
+            showNotification('Transação não autorizada', true);
+          } else {
+            showNotification(`Erro na transferência: ${error.message}`, true);
+          }
+        }
+      }
+    });
+
+    document.addEventListener('click', async (e) => {
+      if (e.target.id === 'stakeConfirmButton') {
+        try {
+          if (!contract) throw new Error('Conecte uma carteira primeiro.');
+          const amount = ethers.parseEther(document.getElementById('stakeAmount').value);
+          const days = document.getElementById('stakeDays').value;
+          const approveTx = await contract.approve(contractAddress, amount, { gasLimit: 100000 });
+          await approveTx.wait();
+          const tx = await contract.stakeTokens(amount, days, { gasLimit: 100000 });
+          await tx.wait();
+          showNotification('Stake realizado com sucesso!');
+          updateAllInfo();
+          toggleDropdown('stakeDropdown');
+        } catch (error) {
+          if (error.code === 'ACTION_REJECTED') {
+            showNotification('Transação não autorizada', true);
+          } else {
+            showNotification(`Erro no stake: ${error.message}`, true);
+          }
+        }
+      }
+    });
+
+    document.addEventListener('click', async (e) => {
+      if (e.target.id === 'unstakeConfirmButton') {
+        try {
+          if (!contract) throw new Error('Conecte uma carteira primeiro.');
+          const amount = ethers.parseEther(document.getElementById('unstakeAmount').innerText);
+          if (amount.eq(0)) throw new Error('Sem token em stake');
+          const tx = await contract.unstakeTokens(amount, { gasLimit: 100000 });
+          await tx.wait();
+          showNotification('Unstake realizado com sucesso!');
+          updateAllInfo();
+          toggleDropdown('unstakeDropdown');
+        } catch (error) {
+          if (error.message === 'Sem token em stake') {
+            showNotification('Sem token em stake', true);
+          } else if (error.code === 'ACTION_REJECTED') {
+            showNotification('Transação não autorizada', true);
+          } else {
+            showNotification(`Erro no unstake: ${error.message}`, true);
+          }
+        }
+      }
+    });
+
+    document.addEventListener('click', async (e) => {
+      if (e.target.id === 'claimConfirmButton') {
+        try {
+          if (!contract) throw new Error('Conecte uma carteira primeiro.');
+          const address = await signer.getAddress();
+          const rewards = await contract.calculateRewards(address);
+          if (rewards.eq(0)) throw new Error('Sem recompensas disponíveis');
+          const tx = await contract.claimRewards({ gasLimit: 100000 });
+          await tx.wait();
+          showNotification('Recompensas retiradas com sucesso!');
+          updateAllInfo();
+          toggleDropdown('claimDropdown');
+        } catch (error) {
+          if (error.message === 'Sem recompensas disponíveis' || error.reason === 'No staked balance') {
+            showNotification('Sem recompensas disponíveis', true);
+          } else if (error.code === 'ACTION_REJECTED') {
+            showNotification('Transação não autorizada', true);
+          } else {
+            showNotification(`Erro ao retirar claim: ${error.message}`, true);
+          }
+        }
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      showPage('principal');
+      document.getElementById('totalSupplyFooter').innerText = '13000000.0';
+      document.getElementById('balance').innerText = '1500000.0';
+      document.getElementById('totalStaked').innerText = '0.0';
+      document.getElementById('rewards').innerText = '0.0';
+      document.getElementById('unstakeAmount').innerText = '0';
+      document.getElementById('claimAmount').innerText = '0.0';
+    });
+  </script>
+</body>
+</html>

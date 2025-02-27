@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VKINHAMEME - Contrato</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #007bff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        pre {
+            background-color: #f9f9f9;
+            padding: 10px;
+            overflow-x: auto;
+            border: 1px solid #eee;
+        }
+        .social-links {
+            margin-top: 20px;
+        }
+        .social-links a {
+            margin-right: 10px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .social-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>VKINHAMEME-Contract</h1>
+    <p>"Contrato ERC-20 VKINHAMEME com funcionalidades de compra, staking e administração."</p>
+
+    <h2>Documentação do Contrato <code>VKINHAMEME</code> ("VKINHA")</h2>
+
+    <h3>Visão Geral</h3>
+    <p>O contrato <code>VKINHAMEME</code> é um token ERC-20 implantado na BNB Chain Mainnet, projetado para oferecer funcionalidades de compra, transferência, staking e administração, com mecanismos anti-bot e taxas para incentivar o uso legítimo e desmotivar abusos. O token, simbolizado como <code>VKINHA</code>, tem um suprimento total máximo de 15 milhões e integra-se a exchanges descentralizadas (DEXs) como PancakeSwap, Biswap, ApeSwap e SushiSwap, com suporte a compras em BNB, BUSD e USDT.</p>
+
+    <h3>Características Principais</h3>
+    <ul>
+        <li><strong>Nome</strong>: VKINHAMEME</li>
+        <li><strong>Símbolo</strong>: VKINHA</li>
+        <li><strong>Decimais</strong>: 18</li>
+        <li><strong>Suprimento Total</strong>: 15.000.000 <code>VKINHA</code></li>
+        <li><strong>Funcionalidades</strong>:
+            <ul>
+                <li>Compra de tokens com BNB, BUSD ou USDT via oráculos Chainlink.</li>
+                <li>Taxas progressivas para compras repetitivas e taxas fixas em transferências/vendas.</li>
+                <li>Staking com recompensas baseadas em taxas acumuladas.</li>
+                <li>Administração com controle de pausa, retirada de fundos e configuração de DEX.</li>
+            </ul>
+        </li>
+        <li><strong>Proteções Anti-Bot</strong>: Limite de uma compra por bloco e taxa progressiva para compras frequentes.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Estrutura do Contrato</h2>
+
+    <h3>Heranças</h3>
+    <ul>
+        <li><code>ERC20</code>: Implementação padrão de token ERC-20 com funções como <code>transfer</code>, <code>approve</code> e <code>transferFrom</code>.</li>
+        <li><code>Ownable</code>: Controle de propriedade com dois administradores (<code>admin1</code> e <code>admin2</code>).</li>
+        <li><code>ReentrancyGuard</code>: Proteção contra ataques de reentrância em funções como <code>buyTokens</code> e <code>unstakeTokens</code>.</li>
+    </ul>
+
+    <h3>Constantes</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Valor</th>
+                <th>Descrição</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><code>MAX_SUPPLY</code></td><td>15_000_000 * 10^18</td><td>Suprimento máximo de <code>VKINHA</code> (15M).</td></tr>
+            <tr><td><code>LOCKED_SUPPLY</code></td><td>2_000_000 * 10^18</td><td>Quantidade inicial bloqueada, desbloqueável após 365 dias.</td></tr>
+            <tr><td><code>ADMIN_SUPPLY</code></td><td>1_500_000 * 10^18</td><td>Quantidade inicial mintada para <code>admin1</code>.</td></tr>
+            <tr><td><code>INITIAL_TOKEN_WALLET_SUPPLY</code></td><td>13_500_000 * 10^18</td><td>Quantidade inicial mintada para <code>tokenWallet</code>, menos <code>LOCKED_SUPPLY</code>.</td></tr>
+            <tr><td><code>MIN_TRANSACTION_AMOUNT</code></td><td>1e15 (0.001 VKINHA)</td><td>Valor mínimo para compras e transferências.</td></tr>
+            <tr><td><code>BASE_BUY_FEE_PERCENTAGE</code></td><td>25 (0.25%)</td><td>Taxa base para compras em <code>buyTokens</code>.</td></tr>
+            <tr><td><code>EXTRA_FEE_INCREMENT</code></td><td>100 (1%)</td><td>Incremento de taxa por compra extra em 30 minutos.</td></tr>
+            <tr><td><code>MAX_EXTRA_FEE_PERCENTAGE</code></td><td>2000 (20%)</td><td>Taxa máxima adicional para compras repetitivas.</td></tr>
+            <tr><td><code>TRANSFER_FEE_PERCENTAGE</code></td><td>300 (3%)</td><td>Taxa fixa para transferências normais.</td></tr>
+            <tr><td><code>SELL_FEE_PERCENTAGE</code></td><td>50 (0.5%)</td><td>Taxa adicional para vendas na DEX.</td></tr>
+            <tr><td><code>COOLDOWN_WINDOW</code></td><td>30 minutes</td><td>Janela para aplicação da taxa progressiva em compras.</td></tr>
+            <tr><td><code>RESET_WINDOW</code></td><td>1 hour</td><td>Período para reset da taxa extra após inatividade.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Endereços Configuráveis (Mainnet)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Endereço Mainnet</th>
+                <th>Descrição</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><code>admin1</code></td><td><code>0x5B419e1A55e24e91D7016D4313BC5b284382Faf6</code></td><td>Administrador principal.</td></tr>
+            <tr><td><code>admin2</code></td><td><code>0xe93bc1259C7F53aBf2073b0528e6007275D0E507</code></td><td>Administrador secundário.</td></tr>
+            <tr><td><code>tokenWallet</code></td><td><code>0xB9A2eF80914Cb1bDBE93F04C86CBC9a54Eb0d7D2</code></td><td>Carteira de armazenamento de tokens disponíveis.</td></tr>
+            <tr><td><code>dexRouter</code></td><td><code>0x10ED43C718714eb63d5aA57B78B54704E256024E</code></td><td>PancakeSwap V2 Router (padrão, configurável).</td></tr>
+            <tr><td><code>WBNB</code></td><td><code>0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c</code></td><td>Wrapped BNB na Mainnet.</td></tr>
+            <tr><td><code>BUSD</code></td><td><code>0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56</code></td><td>BUSD na Mainnet.</td></tr>
+            <tr><td><code>USDT</code></td><td><code>0x55d398326f99059fF775485246999027B3197955</code></td><td>USDT na Mainnet.</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Oráculos Chainlink (Mainnet)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Endereço Mainnet</th>
+                <th>Descrição</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><code>bnbPriceFeed</code></td><td><code>0x0567F2323251f0Aab15c8dFb1967E4Claro, aqui está o restante do código HTML para completar a documentação do contrato `VKINHAMEME`:
+
+                ```html
+                E4e8A7D42aeE</code></td><td>Preço BNB/USD.</td></tr>
+                            <tr><td><code>busdPriceFeed</code></td><td><code>0xcBb98864Ef56E9042e7d2efef76141f15731B82f</code></td><td>Preço BUSD/USD.</td></tr>
+                            <tr><td><code>usdtPriceFeed</code></td><td><code>0xB97Ad0E74fa7d920791E90258A6E2085088b4320</code></td><td>Preço USDT/USD.</td></tr>
+                        </tbody>
+                    </table>
+                
+                    <hr>
+                
+                    <h2>Lógica de Taxas</h2>
+                
+                    <h3>Taxas na Compra (<code>buyTokens</code>)</h3>
+                    <ul>
+                        <li><strong>Taxa Base</strong>: 0.25% (<code>BASE_BUY_FEE_PERCENTAGE</code>).</li>
+                        <li><strong>Taxa Progressiva</strong>:
+                            <ul>
+                                <li><strong>Condição</strong>: Aplicada a compras adicionais dentro de uma janela de 30 minutos (<code>COOLDOWN_WINDOW</code>).</li>
+                                <li><strong>Incremento</strong>: +1% por compra extra (<code>EXTRA_FEE_INCREMENT</code>), até um máximo de 20% (<code>MAX_EXTRA_FEE_PERCENTAGE</code>).</li>
+                                <li><strong>Reset</strong>: Após 1 hora sem compras (<code>RESET_WINDOW</code>), a taxa extra é zerada, voltando a 0.25%.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Cálculo</strong>:
+                            <pre>
+                                uint256 extraFee = purchaseCountInWindow[msg.sender] > 1 ? (purchaseCountInWindow[msg.sender] - 1) * EXTRA_FEE_INCREMENT : 0;
+                                uint256 totalFeePercentage = BASE_BUY_FEE_PERCENTAGE + (extraFee > MAX_EXTRA_FEE_PERCENTAGE ? MAX_EXTRA_FEE_PERCENTAGE : extraFee);
+                                uint256 buyFee = (amount * totalFeePercentage) / 10000;
+                                uint256 amountAfterFee = amount - buyFee;
+                            </pre>
+                        </li>
+                        <li><strong>Destino</strong>: <code>buyFee</code> é transferido para a <code>tokenWallet</code> e somado ao <code>accumulatedFeePool</code>.</li>
+                    </ul>
+                
+                    <h4>Diagrama de Fluxo: Taxa na Compra</h4>
+                    <pre>
+                        Início
+                          ↓
+                        Verifica block.number > lastPurchaseBlock[msg.sender] (Anti-bot por bloco)
+                          ↓
+                        Atualiza lastPurchaseBlock[msg.sender] = block.number
+                          ↓
+                        Verifica block.timestamp >= lastPurchaseTime + RESET_WINDOW? → Sim → purchaseCountInWindow = 0
+                          ↓                                                               Não
+                        Verifica block.timestamp < lastPurchaseTime + COOLDOWN_WINDOW? → Sim → purchaseCountInWindow += 1
+                          ↓                                                               Não → purchaseCountInWindow = 1
+                        Atualiza lastPurchaseTime[msg.sender] = block.timestamp
+                          ↓
+                        Calcula extraFee = (purchaseCountInWindow > 1) ? (purchaseCountInWindow - 1) * 1% : 0
+                          ↓
+                        totalFeePercentage = 0.25% + min(extraFee, 20%)
+                          ↓
+                        buyFee = amount * totalFeePercentage / 10000
+                          ↓
+                        amountAfterFee = amount - buyFee
+                          ↓
+                        Transferência: tokenWallet → msg.sender (amountAfterFee)
+                          ↓
+                        Fee: tokenWallet → tokenWallet (buyFee)
+                          ↓
+                        Fim
+                    </pre>
+                
+                    <h3>Taxas na Transferência (<code>transfer</code>)</h3>
+                    <ul>
+                        <li><strong>Taxa de Transferência</strong>: 3% (<code>TRANSFER_FEE_PERCENTAGE</code>) em todas as transferências.</li>
+                        <li><strong>Taxa de Venda</strong>: 0.5% (<code>SELL_FEE_PERCENTAGE</code>) adicional apenas quando o destinatário é o <code>dexRouter</code> (venda na DEX).</li>
+                        <li><strong>Cálculo</strong>:
+                            <pre>
+                                uint256 transferFee = (amount * TRANSFER_FEE_PERCENTAGE) / 10000;
+                                uint256 sellFee = (to == dexRouter) ? (amount * SELL_FEE_PERCENTAGE) / 10000 : 0;
+                                uint256 totalFee = transferFee + sellFee;
+                                uint256 amountAfterFee = amount - totalFee;
+                            </pre>
+                        </li>
+                        <li><strong>Destino</strong>: <code>totalFee</code> é transferido para a <code>tokenWallet</code> e somado ao <code>accumulatedFeePool</code>.</li>
+                    </ul>
+                
+                    <h4>Diagrama de Fluxo: Taxa na Transferência</h4>
+                    <pre>
+                        Início
+                          ↓
+                        Verifica amount >= MIN_TRANSACTION_AMOUNT (0.001 VKINHA)
+                          ↓
+                        Calcula transferFee = amount * 3% / 10000
+                          ↓
+                        Verifica to == dexRouter? → Sim → sellFee = amount * 0.5% / 10000
+                          ↓                                Não → sellFee = 0
+                        totalFee = transferFee + sellFee
+                          ↓
+                        amountAfterFee = amount - totalFee
+                          ↓
+                        Transferência: owner → to (amountAfterFee)
+                          ↓
+                        Fee: owner → tokenWallet (totalFee)
+                          ↓
+                        Fim
+                    </pre>
+                
+                    <hr>
+                
+                    <h2>Lógica de Recompensas</h2>
+                
+                    <h3>Staking (<code>stakeTokens</code>)</h3>
+                    <ul>
+                        <li><strong>Funcionamento</strong>: Usuários fazem stake de <code>VKINHA</code> por um período (<code>durationInDays</code>), com metade do valor usado para adicionar liquidez na DEX escolhida.</li>
+                        <li><strong>Recompensas</strong>: Calculadas em <code>calculateRewards</code> com base em:
+                            <ul>
+                                <li><strong>Taxa Base</strong>: 0.002% por dia (<code>BASE_REWARD_RATE</code>) sobre o valor em stake.</li>
+                                <li><strong>Taxa Extra</strong>: 0.001% por dia por cada 1000 <code>VKINHA</code> acima de 0.01 (<code>EXTRA_REWARD_RATE</code>), até 0.1% máximo (<code>MAX_REWARD_RATE</code>).</li>
+                                <li><strong>Fee Pool</strong>: 0.002% por dia (<code>FEE_POOL_REWARD_RATE</code>) do <code>accumulatedFeePool</code>, proporcional ao stake do usuário.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Cálculo</strong>:
+                            <pre>
+                                uint256 baseReward = (staker.amount * BASE_REWARD_RATE * timeElapsed) / (10000 * 1 days);
+                                uint256 extraReward = (extraTokens / (1000 * 1e18)) * EXTRA_REWARD_RATE * timeElapsed / (10000 * 1 days);
+                                uint256 fixedReward = baseReward + extraReward > maxReward ? maxReward : baseReward + extraReward;
+                                uint256 feePoolReward = (feePoolDelta * FEE_POOL_REWARD_RATE * timeElapsed) / (10000 * 1 days);
+                                uint256 proportionalReward = totalStaked > 0 ? (staker.amount * feePoolReward) / totalStaked : 0;
+                                return staker.accumulatedRewards + fixedReward + proportionalReward;
+                            </pre>
+                        </li>
+                        <li><strong>Pagamento</strong>: Recompensas são transferidas da <code>tokenWallet</code> ao chamar <code>claimRewards</code>.</li>
+                    </ul>
+                
+                    <h4>Diagrama de Fluxo: Recompensas de Staking</h4>
+                    <pre>
+                        Início
+                          ↓
+                        Verifica staker.amount > 0 e staker.owner == stakerAddress
+                          ↓
+                        Calcula timeElapsed = block.timestamp - lastRewardTime
+                          ↓
+                        baseReward = amount * 0.002% * timeElapsed / (10000 * 1 days)
+                          ↓
+                        extraTokens = amount > 0.01 ? amount - 0.01 : 0
+                          ↓
+                        extraReward = (extraTokens / 1000) * 0.001% * timeElapsed / (10000 * 1 days)
+                          ↓
+                        fixedReward = min(baseReward + extraReward, amount * 0.1% * timeElapsed / (10000 * 1 days))
+                          ↓
+                        feePoolDelta = accumulatedFeePool - lastFeePoolSnapshot
+                          ↓
+                        feePoolReward = feePoolDelta * 0.00Claro, aqui está o restante do código HTML para completar a documentação do contrato `VKINHAMEME`:
+
+                        ```html
+                        2% * timeElapsed / (10000 * 1 days)
+                                  ↓
+                                proportionalReward = totalStaked > 0 ? (amount * feePoolReward) / totalStaked : 0
+                                  ↓
+                                Retorna accumulatedRewards + fixedReward + proportionalReward
+                                  ↓
+                                Fim
+                            </pre>
+                        
+                            <hr>
+                        
+                            <h2>Funcionalidades Administrativas</h2>
+                        
+                            <h3>Administradores</h3>
+                            <ul>
+                                <li><code>admin1</code>: Proprietário inicial, com permissão para todas as funções administrativas.</li>
+                                <li><code>admin2</code>: Administrador secundário, com permissão para funções específicas (ex.: <code>replaceAdmin1</code>, <code>confirmUpgrade</code>).</li>
+                            </ul>
+                        
+                            <h3>Funções Principais</h3>
+                            <ol>
+                                <li><strong><code>replaceAdmin1(address newAdmin1)</code></strong>:
+                                    <ul>
+                                        <li><strong>Permissão</strong>: Apenas <code>admin2</code>.</li>
+                                        <li><strong>Descrição</strong>: Substitui <code>admin1</code> por um novo endereço.</li>
+                                    </ul>
+                                </li>
+                                <li><strong><code>replaceTokenWallet(address newTokenWallet)</code></strong>:
+                                    <ul>
+                                        <li><strong>Permissão</strong>: Apenas <code>admin2</code>.</li>
+                                        <li><strong>Descrição</strong>: Substitui a <code>tokenWallet</code>, exigindo que a atual esteja vazia ou a nova seja vazia.</li>
+                                    </ul>
+                                </li>
+                                <li><strong><code>withdrawFunds(uint256 amount)</code></strong>:
+                                    <ul>
+                                        <li><strong>Permissão</strong>: <code>admin1</code> ou <code>admin2</code>.</li>
+                                        <li><strong>Descrição</strong>: Retira <code>amount</code> de <code>VKINHA</code> da <code>tokenWallet</code>.</li>
+                                    </ul>
+                                </li>
+                                <li><strong><code>setDexRouter(address newRouter)</code></strong>:
+                                    <ul>
+                                        <li><strong>Permissão</strong>: <code>admin1</code> ou <code>admin2</code>.</li>
+                                        <li><strong>Descrição</strong>: Configura o roteador DEX (ex.: PancakeSwap, Biswap).</li>
+                                    </ul>
+                                </li>
+                                <li><strong><code>pause()</code> e <code>unpause()</code></strong>:
+                                    <ul>
+                                        <li><strong>Permissão</strong>: <code>admin1</code> ou <code>admin2</code>.</li>
+                                        <li><strong>Descrição</strong>: Pausa ou retoma operações do contrato.</li>
+                                    </ul>
+                                </li>
+                                <li><strong><code>unlockTokens()</code></strong>:
+                                    <ul>
+                                        <li><strong>Permissão</strong>: <code>admin1</code> ou <code>admin2</code>.</li>
+                                        <li><strong>Descrição</strong>: Desbloqueia <code>LOCKED_SUPPLY</code> após 365 dias.</li>
+                                    </ul>
+                                </li>
+                            </ol>
+                        
+                            <hr>
+                        
+                            <h2>Exemplos de Interação</h2>
+                        
+                            <h3>Usando Remix</h3>
+                            <ol>
+                                <li><strong>Comprar <code>VKINHA</code> com BNB</strong>:
+                                    <ul>
+                                        <li><strong>Função</strong>: <code>buyTokens(uint256 amount, address paymentToken)</code></li>
+                                        <li><strong>Parâmetros</strong>:
+                                            <ul>
+                                                <li><code>amount</code>: <code>1000000000000000</code> (0.001 <code>VKINHA</code>).</li>
+                                                <li><code>paymentToken</code>: <code>"0x0000000000000000000000000000000000000000"</code>.</li>
+                                                <li>"Value": <code>1000000000000000</code> (0.001 BNB).</li>
+                                            </ul>
+                                        </li>
+                                        <li><strong>Passos</strong>:
+                                            <ul>
+                                                <li>Conecte ao Remix com MetaMask (Mainnet).</li>
+                                                <li>Implante o contrato e chame <code>buyTokens</code>.</li>
+                                                <li>Confirme a transação.</li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                </li>
+                                <li><strong>Transferir <code>VKINHA</code></strong>:
+                                    <ul>
+                                        <li><strong>Função</strong>: <code>transfer(address to, uint256 amount)</code></li>
+                                        <li><strong>Parâmetros</strong>:
+                                            <ul>
+                                                <li><code>to</code>: <code>"0xOutroEndereço"</code>.</li>
+                                                <li><code>amount</code>: <code>1000000000000000</code> (0.001 <code>VKINHA</code>).</li>
+                                            </ul>
+                                        </li>
+                                        <li><strong>Passos</strong>:
+                                            <ul>
+                                                <li>Chame <code>transfer</code> no Remix e confirme.</li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ol>
+                        
+                            <h3>Usando Web3.js</h3>
+                            <pre>
+                                const Web3 = require('web3');
+                                const web3 = new Web3('https://bsc-dataseed.binance.org/');
+                                const contractABI = [/* ABI do contrato */];
+                                const contractAddress = '0xContrato';
+                                const contract = new web3.eth.Contract(contractABI, contractAddress);
+                        
+                                async function buyTokens(account, amount) {
+                                    const tx = await contract.methods.buyTokens(amount, "0x0000000000000000000000000000000000000000")
+                                        .send({ from: account, value: web3.utils.toWei('0.001', 'ether') });
+                                    console.log('Compra concluída:', tx.transactionHash);
+                                }
+                        
+                                buyTokens('0xSeuEndereço', '1000000000000000');
+                            </pre>
+                        
+                            <hr>
+                        
+                            <h2>Considerações de Segurança</h2>
+                        
+                            <h3>Vetores de Ataque e Mitigações</h3>
+                            <ol>
+                                <li><strong>Reentrância</strong>:
+                                    <ul>
+                                        <li><strong>Risco</strong>: Um contrato malicioso pode chamar <code>buyTokens</code> ou <code>unstakeTokens</code> repetidamente.</li>
+                                        <li><strong>Mitigação</strong>: Uso do modificador <code>nonReentrant</code> em funções críticas.</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Frontrunning</strong>:
+                                    <ul>
+                                        <li><strong>Risco</strong>: Bots compram antes de usuários legítimos no mesmo bloco.</li>
+                                        <li><strong>Mitigação</strong>: Limite de uma compra por bloco (<code>lastPurchaseBlock</code>).</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Spam de Transações</strong>:
+                                    <ul>
+                                        <li><strong>Risco</strong>: Bots inundam o contrato com compras pequenas.</li>
+                                        <li><strong>Mitigação</strong>: Taxa progressiva (até 20.25%) para compras frequentes.</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Manipulação de Oráculo</strong>:
+                                    <ul>
+                                        <li><strong>Risco</strong>: Preços manipulados nos oráculos Chainlink.</li>
+                                        <li><strong>Mitigação</strong>: Uso de oráculos confiáveis e fallback para preço fixo (0.01 USD) se falhar.</li>
+                                    </ul>
+                                </li>
+                                <li><strong>Acesso Administrativo</strong>:
+                                    <ul>
+                                        <li><strong>Risco</strong>: <code>admin1</code> ou <code>admin2</code> abusam de poderes (ex.: <code>withdrawFunds</code>).</li>
+                                        <li><strong>Mitigação</strong>: Dois administradores com permissões separadas; auditoria recomendada.</li>
+                                    </ul>
+                                </li>
+                            </ol>
+                        
+                            <h3>Recomendações</h3>
+                            <ul>
+                                <li>Audite o contrato com ferramentas como MythX ou Slither antes da implantação.</li>
+                                <li>Teste exaustivamente na Testnet para validar anti-bot e taxas.</li>
+                            </ul>
+                        
+                            <hr>
+                        
+                            <h2>Testes</h2>
+                        
+                            <h3>Estratégia de Teste</h3>
+                            <ul>
+                                <li><strong>Funcionalidades</strong>: Testar <code>buyTokens</code>, <code>transfer</code>, <code>stakeTokens</code>, <code>unstakeTokens</code>, <code>claimRewards</code>.</li>
+                                <li><strong>Anti-Bot</strong>: Simular compras repetitivas para validar taxa progressiva e limite por bloco.</li>
+                                <li><strong>Recompensas</strong>: Verificar cálculo em diferentes cenários de staking.</li>
+                                <li><strong>Administração</strong>: Testar <code>withdrawFunds</code>, <code>pause</code>, <code>setDexRouter</code>.</li>
+                            </ul>
+                        
+                            <h3>Ferramentas Recomendadas</h3>
+                            <ol>
+                                <li><strong>Hardhat</strong>:
+                                    <ul>
+                                        <li><strong>Configuração</strong>:
+                                            <pre>
+                                                const { ethers } = require("hardhat");
+                        
+                                                async function main() {
+                                                    const VKINHAMEME = await ethers.getContractFactory("VKINHAMEME");
+                                                    const vkinha = await VKINHAMEME.deploy();
+                                                    await vkinha.deployed();
+                                                    console.log("Contract deployed to:", vkinha.address);
+                                                }
+                                            </pre>
+                                        </li>
+                                        <li><strong>Testes</strong>:
+                                            <pre>
+                                                it("should apply progressive buy fee", async function () {Claro, aqui está o restante do código HTML para completar a documentação do contrato `VKINHAMEME`:
+
+                                                    ```html
+                                                                                const [owner] = await ethers.getSigners();
+                                                                                await vkinha.buyTokens(ethers.utils.parseEther("0.001"), "0x0", { value: ethers.utils.parseEther("0.001") });
+                                                                                await vkinha.buyTokens(ethers.utils.parseEther("0.001"), "0x0", { value: ethers.utils.parseEther("0.001") });
+                                                                                // Verificar taxa > 0.25%
+                                                                            });
+                                                                        </pre>
+                                                                    </li>
+                                                                </ul>
+                                                            </li>
+                                                            <li><strong>Foundry</strong>:
+                                                                <ul>
+                                                                    <li><strong>Setup</strong>: Use <code>forge init</code> e adicione o contrato.</li>
+                                                                    <li><strong>Teste</strong>: Escreva em Solidity para simular interações.</li>
+                                                                </ul>
+                                                            </li>
+                                                        </ol>
+                                                    
+                                                        <h3>Passos</h3>
+                                                        <ul>
+                                                            <li>Implante na Testnet (Chain ID: 97).</li>
+                                                            <li>Use Remix ou scripts para executar cenários de teste.</li>
+                                                        </ul>
+                                                    
+                                                        <hr>
+                                                    
+                                                        <h2>Otimização de Gás</h2>
+                                                    
+                                                        <h3>Otimizações Atuais</h3>
+                                                        <ul>
+                                                            <li>Uso de <code>unchecked</code> em operações seguras (ex.: subtrações em <code>_transferWithoutFee</code>).</li>
+                                                            <li>Armazenamento eficiente de variáveis como <code>lastPurchaseBlock</code>.</li>
+                                                        </ul>
+                                                    
+                                                        <h3>Possíveis Melhorias</h3>
+                                                        <ol>
+                                                            <li><strong>Reduzir Operações de Storage</strong>:
+                                                                <ul>
+                                                                    <li><strong>Problema</strong>: Mapeamentos como <code>lastPurchaseTime</code> e <code>purchaseCountInWindow</code> custam gás em cada escrita.</li>
+                                                                    <li><strong>Solução</strong>: Combinar em uma estrutura (<code>struct PurchaseInfo</code>) para reduzir acessos:
+                                                                        <pre>
+                                                                            struct PurchaseInfo {
+                                                                                uint256 lastBlock;
+                                                                                uint256 lastTime;
+                                                                                uint256 countInWindow;
+                                                                            }
+                                                                            mapping(address => PurchaseInfo) public purchaseData;
+                                                                        </pre>
+                                                                    </li>
+                                                                </ul>
+                                                            </li>
+                                                            <li><strong>Cache de Variáveis</strong>:
+                                                                <ul>
+                                                                    <li><strong>Problema</strong>: Leituras repetidas de <code>tokenWallet</code> ou <code>dexRouter</code>.</li>
+                                                                    <li><strong>Solução</strong>: Armazenar em variáveis locais em <code>buyTokens</code> e <code>transfer</code>.</li>
+                                                                </ul>
+                                                            </li>
+                                                            <li><strong>Remover Verificações Redundantes</strong>:
+                                                                <ul>
+                                                                    <li><strong>Problema</strong>: <code>require</code> em <code>_transfer</code> já verifica saldo, duplicado em <code>transfer</code>.</li>
+                                                                    <li><strong>Solução</strong>: Remover redundâncias onde possível.</li>
+                                                                </ul>
+                                                            </li>
+                                                        </ol>
+                                                    
+                                                        <h3>Impacto</h3>
+                                                        <ul>
+                                                            <li>Redução estimada: 5-10% no custo de gás por transação.</li>
+                                                        </ul>
+                                                    
+                                                        <div class="social-links">
+                                                            Siga-nos:
+                                                            <a href="https://twitter.com/vkinhacoin" target="_blank">Twitter</a> |
+                                                            <a href="https://instagram.com/vkinhacoin" target="_blank">Instagram</a> |
+                                                            <a href="https://t.me/vknhacoin" target="_blank">Telegram</a>
+                                                        </div>
+                                                    
+                                                    </body>
+                                                    </html>                                               
